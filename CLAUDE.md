@@ -104,3 +104,10 @@ bun --hot ./index.ts
 ```
 
 For more information, read the Bun API docs in `node_modules/bun-types/docs/**.mdx`.
+
+## Active Technologies
+- TypeScript 5.x on Bun 1.x (ESM) + Bun runtime APIs (`fetch`, file I/O), `zod`, `node-cron`, `dotenv`, `fast-xml-parser` (RSS parsing), `gray-matter` (Markdown + YAML front matter parsing), `vitest`, `@vitest/coverage-v8` (001-morning-market-review-agent)
+- Filesystem only (`config/*.md`, `skills/**/*.md`, `reports/*.md`, `logs/*.jsonl`) (001-morning-market-review-agent)
+
+## Recent Changes
+- 001-morning-market-review-agent: Added TypeScript 5.x on Bun 1.x (ESM) + Bun runtime APIs (`fetch`, file I/O), `zod`, `node-cron`, `dotenv`, `fast-xml-parser` (RSS parsing), `gray-matter` (Markdown + YAML front matter parsing), `vitest`, `@vitest/coverage-v8`

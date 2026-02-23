@@ -1,50 +1,56 @@
-# [PROJECT_NAME] Constitution
-<!-- Example: Spec Constitution, TaskFlow Constitution, etc. -->
+# Market Monitor Constitution
 
 ## Core Principles
 
-### [PRINCIPLE_1_NAME]
-<!-- Example: I. Library-First -->
-[PRINCIPLE_1_DESCRIPTION]
-<!-- Example: Every feature starts as a standalone library; Libraries must be self-contained, independently testable, documented; Clear purpose required - no organizational-only libraries -->
+### I. MVP Simplicity First (Non-Negotiable)
+This project is a personal MVP. The default decision must be the simplest implementation that solves the current problem clearly and correctly.
+Avoid unnecessary abstractions, premature optimization, framework complexity, and speculative architecture.
+Every new layer, dependency, or pattern must be justified by a concrete current need.
 
-### [PRINCIPLE_2_NAME]
-<!-- Example: II. CLI Interface -->
-[PRINCIPLE_2_DESCRIPTION]
-<!-- Example: Every library exposes functionality via CLI; Text in/out protocol: stdin/args → stdout, errors → stderr; Support JSON + human-readable formats -->
+### II. Clarity Over Cleverness
+Code must be easy to read, easy to change, and easy to debug by one person returning later.
+Prefer explicit names, small functions, straightforward control flow, and predictable data structures.
+Clean code is required: remove dead code, avoid duplication when it improves clarity, and keep modules focused.
 
-### [PRINCIPLE_3_NAME]
-<!-- Example: III. Test-First (NON-NEGOTIABLE) -->
-[PRINCIPLE_3_DESCRIPTION]
-<!-- Example: TDD mandatory: Tests written → User approved → Tests fail → Then implement; Red-Green-Refactor cycle strictly enforced -->
+### III. Test-Driven Development (Non-Negotiable)
+Development must follow TDD and spec-driven development:
+1. Write or update the spec/expected behavior.
+2. Write a failing test.
+3. Implement the smallest change to pass the test.
+4. Refactor while keeping tests green.
+No feature is complete without tests that validate real behavior.
 
-### [PRINCIPLE_4_NAME]
-<!-- Example: IV. Integration Testing -->
-[PRINCIPLE_4_DESCRIPTION]
-<!-- Example: Focus areas requiring integration tests: New library contract tests, Contract changes, Inter-service communication, Shared schemas -->
+### IV. Real Tests Only
+No mocks, no placeholders, no fake implementations, and no mockup behavior in production code or tests unless explicitly approved for an external system that cannot be exercised locally.
+Tests must validate actual logic and real integration points whenever feasible for an MVP.
+If a test double is unavoidable, it must be documented and minimized.
 
-### [PRINCIPLE_5_NAME]
-<!-- Example: V. Observability, VI. Versioning & Breaking Changes, VII. Simplicity -->
-[PRINCIPLE_5_DESCRIPTION]
-<!-- Example: Text I/O ensures debuggability; Structured logging required; Or: MAJOR.MINOR.BUILD format; Or: Start simple, YAGNI principles -->
+### V. Coverage and Quality Gates
+Tests must be written, executed, and passing before considering work complete.
+Minimum test coverage is 75%; target coverage is 80% or higher.
+Coverage is a quality gate, not a substitute for meaningful assertions.
+A change that reduces clarity or testability should be rejected unless there is a documented reason.
 
-## [SECTION_2_NAME]
-<!-- Example: Additional Constraints, Security Requirements, Performance Standards, etc. -->
+## Additional Constraints
 
-[SECTION_2_CONTENT]
-<!-- Example: Technology stack requirements, compliance standards, deployment policies, etc. -->
+- All documentation, code, comments, commit-facing text, and user-facing text produced for this project must be written in English.
+- Prefer direct implementations over generic reusable systems until reuse is proven.
+- Keep dependencies minimal; prefer built-in platform capabilities when reasonable.
+- No placeholder features or partially implemented flows should be presented as complete.
 
-## [SECTION_3_NAME]
-<!-- Example: Development Workflow, Review Process, Quality Gates, etc. -->
+## Development Workflow
 
-[SECTION_3_CONTENT]
-<!-- Example: Code review requirements, testing gates, deployment approval process, etc. -->
+1. Define behavior in a spec or task description in English.
+2. Write failing tests first (unit/integration as appropriate).
+3. Implement the simplest solution that passes.
+4. Refactor for readability and maintainability.
+5. Run the full relevant test suite and verify coverage threshold.
+6. Update documentation/comments in English when behavior changes.
 
 ## Governance
-<!-- Example: Constitution supersedes all other practices; Amendments require documentation, approval, migration plan -->
 
-[GOVERNANCE_RULES]
-<!-- Example: All PRs/reviews must verify compliance; Complexity must be justified; Use [GUIDANCE_FILE] for runtime development guidance -->
+This constitution overrides conflicting local development preferences for this repository.
+All changes must be reviewed against simplicity, clarity, TDD compliance, and coverage thresholds.
+Amendments must update this file with a clear reason and a new version/date entry.
 
-**Version**: [CONSTITUTION_VERSION] | **Ratified**: [RATIFICATION_DATE] | **Last Amended**: [LAST_AMENDED_DATE]
-<!-- Example: Version: 2.1.1 | Ratified: 2025-06-13 | Last Amended: 2025-07-16 -->
+**Version**: 1.0.0 | **Ratified**: 2026-02-23 | **Last Amended**: 2026-02-23

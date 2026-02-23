@@ -30,14 +30,14 @@ description: "Task list for Morning Market Review Agent (V1)"
 
 **Purpose**: Initialize the Bun/TypeScript project for TDD implementation with Vitest and planned directory structure.
 
-- [ ] T001 Update Bun scripts and test commands in `package.json` for `dev`, `build`, `test`, `test:unit`, `test:functional`, and `test:coverage`
-- [ ] T002 Add Vitest coverage configuration in `vitest.config.ts`
-- [ ] T003 [P] Create runtime directories with tracked placeholders in `config/.gitkeep`, `skills/sentiment/.gitkeep`, `skills/outlook/.gitkeep`, `skills/positioning/.gitkeep`, `reports/.gitkeep`, and `logs/.gitkeep`
-- [ ] T004 [P] Create test directory placeholders in `tests/unit/.gitkeep`, `tests/functional/.gitkeep`, `tests/fixtures/rss/.gitkeep`, `tests/fixtures/coingecko/.gitkeep`, `tests/fixtures/fred/.gitkeep`, `tests/fixtures/skills/.gitkeep`, and `tests/helpers/.gitkeep`
-- [ ] T005 [P] Create local workspace helper for filesystem-based tests in `tests/helpers/temp-workspace.ts`
-- [ ] T006 [P] Create starter fixture files in `tests/fixtures/rss/sample-feed.xml`, `tests/fixtures/coingecko/simple-price.json`, `tests/fixtures/fred/series-observations.json`, and `tests/fixtures/skills/valid-skill.md`
-- [ ] T007 Replace Bun hello-world entry with CLI bootstrap in `src/index.ts`
-- [ ] T008 [P] Create local config templates in `config/rss-feeds.md` and `config/watchlist.json` (contract-valid examples, no personal feed list)
+- [x] T001 Update Bun scripts and test commands in `package.json` for `dev`, `build`, `test`, `test:unit`, `test:functional`, and `test:coverage`
+- [x] T002 Add Vitest coverage configuration in `vitest.config.ts`
+- [x] T003 [P] Create runtime directories with tracked placeholders in `config/.gitkeep`, `skills/sentiment/.gitkeep`, `skills/outlook/.gitkeep`, `skills/positioning/.gitkeep`, `reports/.gitkeep`, and `logs/.gitkeep`
+- [x] T004 [P] Create test directory placeholders in `tests/unit/.gitkeep`, `tests/functional/.gitkeep`, `tests/fixtures/rss/.gitkeep`, `tests/fixtures/coingecko/.gitkeep`, `tests/fixtures/fred/.gitkeep`, `tests/fixtures/skills/.gitkeep`, and `tests/helpers/.gitkeep`
+- [x] T005 [P] Create local workspace helper for filesystem-based tests in `tests/helpers/temp-workspace.ts`
+- [x] T006 [P] Create starter fixture files in `tests/fixtures/rss/sample-feed.xml`, `tests/fixtures/coingecko/simple-price.json`, `tests/fixtures/fred/series-observations.json`, and `tests/fixtures/skills/valid-skill.md`
+- [x] T007 Replace Bun hello-world entry with CLI bootstrap in `src/index.ts`
+- [x] T008 [P] Create local config templates in `config/rss-feeds.md` and `config/watchlist.json` (contract-valid examples, no personal feed list)
 
 ---
 
@@ -49,25 +49,25 @@ description: "Task list for Morning Market Review Agent (V1)"
 
 ### Tests for Foundational Infrastructure (TDD First)
 
-- [ ] T009 [P] Add filename format tests for `YYYY-MM-DD-hh-mm_market-report.md` in `tests/unit/report/file-naming.spec.ts`
-- [ ] T010 [P] Add local-time utility tests (local date labels and zero-padded time) in `tests/unit/shared/time.spec.ts`
-- [ ] T011 [P] Add environment and path resolution tests in `tests/unit/config/env-paths.spec.ts`
-- [ ] T012 [P] Add append-only JSONL run-log tests in `tests/unit/runtime/run-log.spec.ts`
+- [x] T009 [P] Add filename format tests for `YYYY-MM-DD-hh-mm_market-report.md` in `tests/unit/report/file-naming.spec.ts`
+- [x] T010 [P] Add local-time utility tests (local date labels and zero-padded time) in `tests/unit/shared/time.spec.ts`
+- [x] T011 [P] Add environment and path resolution tests in `tests/unit/config/env-paths.spec.ts`
+- [x] T012 [P] Add append-only JSONL run-log tests in `tests/unit/runtime/run-log.spec.ts`
 
 ### Implementation for Foundational Infrastructure
 
-- [ ] T013 Create shared domain types and enums in `src/shared/types.ts`
-- [ ] T014 [P] Create shared error classes in `src/shared/errors.ts`
-- [ ] T015 [P] Create shared validation helpers in `src/shared/validation.ts`
-- [ ] T016 Implement local-time formatting helpers in `src/shared/time.ts`
-- [ ] T017 Implement runtime path configuration in `src/config/paths.ts`
-- [ ] T018 Implement environment parsing and validation in `src/config/env.ts`
-- [ ] T019 Implement report filename generation and validation in `src/report/file-naming.ts`
-- [ ] T020 Implement report model types and constructors in `src/report/report-model.ts`
-- [ ] T021 Implement append-only JSONL run logging in `src/runtime/run-log.ts`
-- [ ] T022 Implement app context assembly (env + paths + clock utilities) in `src/runtime/app-context.ts`
-- [ ] T023 Implement CLI command dispatch and argument parsing in `src/cli/main.ts`
-- [ ] T024 Implement base `config validate` command wiring in `src/cli/commands/validate-config.ts`
+- [x] T013 Create shared domain types and enums in `src/shared/types.ts`
+- [x] T014 [P] Create shared error classes in `src/shared/errors.ts`
+- [x] T015 [P] Create shared validation helpers in `src/shared/validation.ts`
+- [x] T016 Implement local-time formatting helpers in `src/shared/time.ts`
+- [x] T017 Implement runtime path configuration in `src/config/paths.ts`
+- [x] T018 Implement environment parsing and validation in `src/config/env.ts`
+- [x] T019 Implement report filename generation and validation in `src/report/file-naming.ts`
+- [x] T020 Implement report model types and constructors in `src/report/report-model.ts`
+- [x] T021 Implement append-only JSONL run logging in `src/runtime/run-log.ts`
+- [x] T022 Implement app context assembly (env + paths + clock utilities) in `src/runtime/app-context.ts`
+- [x] T023 Implement CLI command dispatch and argument parsing in `src/cli/main.ts`
+- [x] T024 Implement base `config validate` command wiring in `src/cli/commands/validate-config.ts`
 
 **Checkpoint**: Foundation ready for user story implementation.
 
@@ -81,39 +81,39 @@ description: "Task list for Morning Market Review Agent (V1)"
 
 ### Tests for User Story 1 (Write First) ⚠️
 
-- [ ] T025 [P] [US1] Add RSS feed catalog Markdown parsing/validation tests (including `default_lookback_hours` parsing and precedence rules) in `tests/unit/config/feed-catalog.spec.ts`
-- [ ] T026 [P] [US1] Add watchlist file parsing/validation tests in `tests/unit/config/watchlist.spec.ts`
-- [ ] T027 [P] [US1] Add RSS XML normalization tests in `tests/unit/ingest/rss-parse.spec.ts`
-- [ ] T028 [P] [US1] Add news deduplication fingerprint tests in `tests/unit/ingest/deduplicate-news.spec.ts`
-- [ ] T029 [P] [US1] Add CoinGecko and FRED response parsing/mapping tests in `tests/unit/market/coingecko-client.spec.ts` and `tests/unit/market/fred-client.spec.ts`
-- [ ] T030 [P] [US1] Add crypto snapshot and macro-series aggregation tests in `tests/unit/market/snapshot-service.spec.ts` and `tests/unit/market/macro-series-service.spec.ts`
-- [ ] T031 [P] [US1] Add regime detection classification tests with macro-context inputs in `tests/unit/analysis/regime-detector.spec.ts`
-- [ ] T032 [P] [US1] Add probabilistic outlook constraint tests (sum=100, cap<=70) in `tests/unit/analysis/outlook-service.spec.ts`
-- [ ] T033 [P] [US1] Add risk/invalidation block generation tests in `tests/unit/analysis/risk-invalidation.spec.ts`
-- [ ] T034 [P] [US1] Add deterministic baseline sentiment output tests in `tests/unit/analysis/sentiment-service.spec.ts`
-- [ ] T035 [P] [US1] Add deterministic baseline position wording structure tests in `tests/unit/analysis/position-wording.spec.ts`
-- [ ] T036 [P] [US1] Add Markdown report renderer section-order and metadata tests in `tests/unit/report/markdown-renderer.spec.ts`
-- [ ] T037 [US1] Add end-to-end manual review generation functional test (including FRED macro context ingestion) in `tests/functional/review-run.spec.ts`
+- [x] T025 [P] [US1] Add RSS feed catalog Markdown parsing/validation tests (including `default_lookback_hours` parsing and precedence rules) in `tests/unit/config/feed-catalog.spec.ts`
+- [x] T026 [P] [US1] Add watchlist file parsing/validation tests in `tests/unit/config/watchlist.spec.ts`
+- [x] T027 [P] [US1] Add RSS XML normalization tests in `tests/unit/ingest/rss-parse.spec.ts`
+- [x] T028 [P] [US1] Add news deduplication fingerprint tests in `tests/unit/ingest/deduplicate-news.spec.ts`
+- [x] T029 [P] [US1] Add CoinGecko and FRED response parsing/mapping tests in `tests/unit/market/coingecko-client.spec.ts` and `tests/unit/market/fred-client.spec.ts`
+- [x] T030 [P] [US1] Add crypto snapshot and macro-series aggregation tests in `tests/unit/market/snapshot-service.spec.ts` and `tests/unit/market/macro-series-service.spec.ts`
+- [x] T031 [P] [US1] Add regime detection classification tests with macro-context inputs in `tests/unit/analysis/regime-detector.spec.ts`
+- [x] T032 [P] [US1] Add probabilistic outlook constraint tests (sum=100, cap<=70) in `tests/unit/analysis/outlook-service.spec.ts`
+- [x] T033 [P] [US1] Add risk/invalidation block generation tests in `tests/unit/analysis/risk-invalidation.spec.ts`
+- [x] T034 [P] [US1] Add deterministic baseline sentiment output tests in `tests/unit/analysis/sentiment-service.spec.ts`
+- [x] T035 [P] [US1] Add deterministic baseline position wording structure tests in `tests/unit/analysis/position-wording.spec.ts`
+- [x] T036 [P] [US1] Add Markdown report renderer section-order and metadata tests in `tests/unit/report/markdown-renderer.spec.ts`
+- [x] T037 [US1] Add end-to-end manual review generation functional test (including FRED macro context ingestion) in `tests/functional/review-run.spec.ts`
 
 ### Implementation for User Story 1
 
-- [ ] T038 [P] [US1] Implement RSS feed catalog parser for Markdown table contract with `default_lookback_hours` support and precedence handling in `src/config/feed-catalog.ts`
-- [ ] T039 [P] [US1] Implement watchlist parser/validator for market snapshot instruments in `src/config/watchlist.ts`
-- [ ] T040 [P] [US1] Implement RSS HTTP fetcher with lookback filtering inputs in `src/ingest/rss-fetch.ts`
-- [ ] T041 [P] [US1] Implement RSS/Atom entry normalization in `src/ingest/rss-parse.ts`
-- [ ] T042 [P] [US1] Implement article deduplication by fingerprint in `src/ingest/deduplicate-news.ts`
-- [ ] T043 [P] [US1] Implement CoinGecko API client for current price/24h/7d/volume data in `src/market/coingecko-client.ts`
-- [ ] T044 [P] [US1] Implement FRED API client for CPI/PCE/unemployment/M2 observations in `src/market/fred-client.ts`
-- [ ] T045 [US1] Implement provider registry plus crypto snapshot and macro-series services in `src/market/provider-registry.ts`, `src/market/snapshot-service.ts`, and `src/market/macro-series-service.ts`
-- [ ] T046 [P] [US1] Implement regime classification logic using FRED-backed macro context in `src/analysis/regime-detector.ts`
-- [ ] T047 [P] [US1] Implement probabilistic outlook generation and constraint normalization in `src/analysis/outlook-service.ts`
-- [ ] T048 [P] [US1] Implement risk/invalidation section builder in `src/analysis/risk-invalidation.ts`
-- [ ] T049 [P] [US1] Implement deterministic baseline sentiment scoring service in `src/analysis/sentiment-service.ts`
-- [ ] T050 [P] [US1] Implement deterministic baseline position wording builder in `src/analysis/position-wording.ts`
-- [ ] T051 [US1] Implement Markdown rendering for required sections and metadata in `src/report/markdown-renderer.ts`
-- [ ] T052 [US1] Implement report file writer and run-report persistence in `src/report/report-writer.ts`
-- [ ] T053 [US1] Implement `review run` command orchestration (manual trigger) in `src/cli/commands/run-review.ts`
-- [ ] T054 [US1] Extend `config validate` command to validate `config/rss-feeds.md` (including lookback config) and `config/watchlist.json` in `src/cli/commands/validate-config.ts`
+- [x] T038 [P] [US1] Implement RSS feed catalog parser for Markdown table contract with `default_lookback_hours` support and precedence handling in `src/config/feed-catalog.ts`
+- [x] T039 [P] [US1] Implement watchlist parser/validator for market snapshot instruments in `src/config/watchlist.ts`
+- [x] T040 [P] [US1] Implement RSS HTTP fetcher with lookback filtering inputs in `src/ingest/rss-fetch.ts`
+- [x] T041 [P] [US1] Implement RSS/Atom entry normalization in `src/ingest/rss-parse.ts`
+- [x] T042 [P] [US1] Implement article deduplication by fingerprint in `src/ingest/deduplicate-news.ts`
+- [x] T043 [P] [US1] Implement CoinGecko API client for current price/24h/7d/volume data in `src/market/coingecko-client.ts`
+- [x] T044 [P] [US1] Implement FRED API client for CPI/PCE/unemployment/M2 observations in `src/market/fred-client.ts`
+- [x] T045 [US1] Implement provider registry plus crypto snapshot and macro-series services in `src/market/provider-registry.ts`, `src/market/snapshot-service.ts`, and `src/market/macro-series-service.ts`
+- [x] T046 [P] [US1] Implement regime classification logic using FRED-backed macro context in `src/analysis/regime-detector.ts`
+- [x] T047 [P] [US1] Implement probabilistic outlook generation and constraint normalization in `src/analysis/outlook-service.ts`
+- [x] T048 [P] [US1] Implement risk/invalidation section builder in `src/analysis/risk-invalidation.ts`
+- [x] T049 [P] [US1] Implement deterministic baseline sentiment scoring service in `src/analysis/sentiment-service.ts`
+- [x] T050 [P] [US1] Implement deterministic baseline position wording builder in `src/analysis/position-wording.ts`
+- [x] T051 [US1] Implement Markdown rendering for required sections and metadata in `src/report/markdown-renderer.ts`
+- [x] T052 [US1] Implement report file writer and run-report persistence in `src/report/report-writer.ts`
+- [x] T053 [US1] Implement `review run` command orchestration (manual trigger) in `src/cli/commands/run-review.ts`
+- [x] T054 [US1] Extend `config validate` command to validate `config/rss-feeds.md` (including lookback config) and `config/watchlist.json` in `src/cli/commands/validate-config.ts`
 
 **Checkpoint**: User Story 1 should produce a usable local Markdown market report (MVP).
 
@@ -127,17 +127,17 @@ description: "Task list for Morning Market Review Agent (V1)"
 
 ### Tests for User Story 2 (Write First) ⚠️
 
-- [ ] T055 [P] [US2] Add duplicate-run lock acquisition/release tests in `tests/unit/runtime/run-lock.spec.ts`
-- [ ] T056 [P] [US2] Add scheduler local-time slot evaluation tests in `tests/unit/runtime/scheduler.spec.ts`
-- [ ] T057 [US2] Add scheduler duplicate-guard functional test in `tests/functional/scheduler-duplicate-guard.spec.ts`
+- [x] T055 [P] [US2] Add duplicate-run lock acquisition/release tests in `tests/unit/runtime/run-lock.spec.ts`
+- [x] T056 [P] [US2] Add scheduler local-time slot evaluation tests in `tests/unit/runtime/scheduler.spec.ts`
+- [x] T057 [US2] Add scheduler duplicate-guard functional test in `tests/functional/scheduler-duplicate-guard.spec.ts`
 
 ### Implementation for User Story 2
 
-- [ ] T058 [US2] Implement filesystem-based duplicate-run lock management in `src/runtime/run-lock.ts`
-- [ ] T059 [US2] Implement local-timezone scheduler loop and trigger execution in `src/runtime/scheduler.ts`
-- [ ] T060 [US2] Implement `scheduler start` command and schedule override parsing in `src/cli/commands/run-scheduler.ts`
-- [ ] T061 [US2] Extend `review run` trigger handling for `manual|scheduled` and duplicate window semantics in `src/cli/commands/run-review.ts`
-- [ ] T062 [US2] Add duplicate skip logging fields and messages for scheduler attempts in `src/runtime/run-log.ts`
+- [x] T058 [US2] Implement filesystem-based duplicate-run lock management in `src/runtime/run-lock.ts`
+- [x] T059 [US2] Implement local-timezone scheduler loop and trigger execution in `src/runtime/scheduler.ts`
+- [x] T060 [US2] Implement `scheduler start` command and schedule override parsing in `src/cli/commands/run-scheduler.ts`
+- [x] T061 [US2] Extend `review run` trigger handling for `manual|scheduled` and duplicate window semantics in `src/cli/commands/run-review.ts`
+- [x] T062 [US2] Add duplicate skip logging fields and messages for scheduler attempts in `src/runtime/run-log.ts`
 
 **Checkpoint**: Scheduler can run daily and prevent duplicate executions reliably.
 
@@ -151,18 +151,18 @@ description: "Task list for Morning Market Review Agent (V1)"
 
 ### Tests for User Story 3 (Write First) ⚠️
 
-- [ ] T063 [P] [US3] Add report writer no-overwrite and collision handling tests in `tests/unit/report/report-writer.spec.ts`
-- [ ] T064 [P] [US3] Add run-log history append/read consistency tests in `tests/unit/runtime/run-log-history.spec.ts`
-- [ ] T065 [US3] Add 30-run history persistence functional test (sequential local-date simulations) in `tests/functional/history-persistence.spec.ts`
-- [ ] T066 [US3] Add partial/failure log preservation functional test in `tests/functional/history-failure-preservation.spec.ts`
+- [x] T063 [P] [US3] Add report writer no-overwrite and collision handling tests in `tests/unit/report/report-writer.spec.ts`
+- [x] T064 [P] [US3] Add run-log history append/read consistency tests in `tests/unit/runtime/run-log-history.spec.ts`
+- [x] T065 [US3] Add 30-run history persistence functional test (sequential local-date simulations) in `tests/functional/history-persistence.spec.ts`
+- [x] T066 [US3] Add partial/failure log preservation functional test in `tests/functional/history-failure-preservation.spec.ts`
 
 ### Implementation for User Story 3
 
-- [ ] T067 [US3] Enhance report writer to prevent overwriting existing report files and preserve metadata consistency in `src/report/report-writer.ts`
-- [ ] T068 [US3] Add run-log history reading/query helpers for functional validation in `src/runtime/run-log.ts`
-- [ ] T069 [US3] Add explicit report status metadata rendering (`complete|incomplete`) and omission reason output in `src/report/markdown-renderer.ts`
-- [ ] T070 [US3] Extend `review run` lifecycle status transitions (`success|partial_success|failed`) in `src/cli/commands/run-review.ts`
-- [ ] T071 [US3] Add local-date labeling helpers used by report organization/history checks in `src/shared/time.ts`
+- [x] T067 [US3] Enhance report writer to prevent overwriting existing report files and preserve metadata consistency in `src/report/report-writer.ts`
+- [x] T068 [US3] Add run-log history reading/query helpers for functional validation in `src/runtime/run-log.ts`
+- [x] T069 [US3] Add explicit report status metadata rendering (`complete|incomplete`) and omission reason output in `src/report/markdown-renderer.ts`
+- [x] T070 [US3] Extend `review run` lifecycle status transitions (`success|partial_success|failed`) in `src/cli/commands/run-review.ts`
+- [x] T071 [US3] Add local-date labeling helpers used by report organization/history checks in `src/shared/time.ts`
 
 **Checkpoint**: Historical reports and run logs are stable and analyzable over time.
 
@@ -176,30 +176,30 @@ description: "Task list for Morning Market Review Agent (V1)"
 
 ### Tests for User Story 4 (Write First) ⚠️
 
-- [ ] T072 [P] [US4] Add skill file YAML front matter and required-section parsing tests in `tests/unit/skills/skill-parser.spec.ts`
-- [ ] T073 [P] [US4] Add skill loader duplicate-id and unknown-binding validation tests in `tests/unit/skills/skill-loader.spec.ts`
-- [ ] T074 [P] [US4] Add binding registry dispatch and deterministic outlook-validation binding tests in `tests/unit/skills/binding-registry.spec.ts` and `tests/unit/skills/bindings/deterministic-outlook-validation.spec.ts`
-- [ ] T075 [P] [US4] Add LLM-assisted sentiment constraint enforcement tests in `tests/unit/analysis/sentiment-service.llm.spec.ts`
-- [ ] T076 [P] [US4] Add LLM-assisted position wording structure/non-emotional rule tests in `tests/unit/analysis/position-wording.llm.spec.ts`
-- [ ] T077 [US4] Add incomplete-report-on-LLM-failure functional test in `tests/functional/incomplete-report-llm-failure.spec.ts`
-- [ ] T078 [US4] Add config validation tests for `skills/**/*.md` contract files in `tests/functional/skill-config-validate.spec.ts`
+- [x] T072 [P] [US4] Add skill file YAML front matter and required-section parsing tests in `tests/unit/skills/skill-parser.spec.ts`
+- [x] T073 [P] [US4] Add skill loader duplicate-id and unknown-binding validation tests in `tests/unit/skills/skill-loader.spec.ts`
+- [x] T074 [P] [US4] Add binding registry dispatch and deterministic outlook-validation binding tests in `tests/unit/skills/binding-registry.spec.ts` and `tests/unit/skills/bindings/deterministic-outlook-validation.spec.ts`
+- [x] T075 [P] [US4] Add LLM-assisted sentiment constraint enforcement tests in `tests/unit/analysis/sentiment-service.llm.spec.ts`
+- [x] T076 [P] [US4] Add LLM-assisted position wording structure/non-emotional rule tests in `tests/unit/analysis/position-wording.llm.spec.ts`
+- [x] T077 [US4] Add incomplete-report-on-LLM-failure functional test in `tests/functional/incomplete-report-llm-failure.spec.ts`
+- [x] T078 [US4] Add config validation tests for `skills/**/*.md` contract files in `tests/functional/skill-config-validate.spec.ts`
 
 ### Implementation for User Story 4
 
-- [ ] T079 [P] [US4] Implement Markdown+YAML skill parser in `src/skills/skill-parser.ts`
-- [ ] T080 [P] [US4] Implement recursive skill loader and validation in `src/skills/skill-loader.ts`
-- [ ] T081 [P] [US4] Implement deterministic binding registry and deterministic outlook-validation binding handler in `src/skills/binding-registry.ts` and `src/skills/bindings/deterministic-outlook-validation.ts`
-- [ ] T082 [P] [US4] Implement deterministic report-format binding helper in `src/skills/bindings/deterministic-report-format.ts`
-- [ ] T083 [P] [US4] Implement LLM sentiment binding handler in `src/skills/bindings/llm-sentiment.ts`
-- [ ] T084 [P] [US4] Implement LLM position-wording binding handler in `src/skills/bindings/llm-position-wording.ts`
-- [ ] T085 [US4] Upgrade sentiment service to use skill metadata + binding execution with LLM failure omission handling in `src/analysis/sentiment-service.ts`
-- [ ] T086 [US4] Upgrade position wording service to use skill metadata + binding execution with structured output enforcement in `src/analysis/position-wording.ts`
-- [ ] T087 [US4] Integrate skill loading/exposure and binding execution into `review run` orchestration in `src/cli/commands/run-review.ts`
-- [ ] T088 [US4] Extend `config validate` to validate `skills/**/*.md` against the skill contract in `src/cli/commands/validate-config.ts`
-- [ ] T089 [US4] Render omitted LLM-dependent sections with explicit reasons in incomplete reports in `src/report/markdown-renderer.ts`
-- [ ] T090 [P] [US4] Add default sentiment skill file in `skills/sentiment/sentiment-news-price-coherence-v1.md`
-- [ ] T091 [P] [US4] Add default outlook validation skill file in `skills/outlook/outlook-validation-v1.md`
-- [ ] T092 [P] [US4] Add default position wording skill file in `skills/positioning/position-wording-v1.md`
+- [x] T079 [P] [US4] Implement Markdown+YAML skill parser in `src/skills/skill-parser.ts`
+- [x] T080 [P] [US4] Implement recursive skill loader and validation in `src/skills/skill-loader.ts`
+- [x] T081 [P] [US4] Implement deterministic binding registry and deterministic outlook-validation binding handler in `src/skills/binding-registry.ts` and `src/skills/bindings/deterministic-outlook-validation.ts`
+- [x] T082 [P] [US4] Implement deterministic report-format binding helper in `src/skills/bindings/deterministic-report-format.ts`
+- [x] T083 [P] [US4] Implement LLM sentiment binding handler in `src/skills/bindings/llm-sentiment.ts`
+- [x] T084 [P] [US4] Implement LLM position-wording binding handler in `src/skills/bindings/llm-position-wording.ts`
+- [x] T085 [US4] Upgrade sentiment service to use skill metadata + binding execution with LLM failure omission handling in `src/analysis/sentiment-service.ts`
+- [x] T086 [US4] Upgrade position wording service to use skill metadata + binding execution with structured output enforcement in `src/analysis/position-wording.ts`
+- [x] T087 [US4] Integrate skill loading/exposure and binding execution into `review run` orchestration in `src/cli/commands/run-review.ts`
+- [x] T088 [US4] Extend `config validate` to validate `skills/**/*.md` against the skill contract in `src/cli/commands/validate-config.ts`
+- [x] T089 [US4] Render omitted LLM-dependent sections with explicit reasons in incomplete reports in `src/report/markdown-renderer.ts`
+- [x] T090 [P] [US4] Add default sentiment skill file in `skills/sentiment/sentiment-news-price-coherence-v1.md`
+- [x] T091 [P] [US4] Add default outlook validation skill file in `skills/outlook/outlook-validation-v1.md`
+- [x] T092 [P] [US4] Add default position wording skill file in `skills/positioning/position-wording-v1.md`
 
 **Checkpoint**: Skills are loaded from Markdown files, descriptions are exposed to the agent/runtime, and LLM-assisted outputs remain deterministic at the binding boundary.
 
@@ -209,13 +209,13 @@ description: "Task list for Morning Market Review Agent (V1)"
 
 **Purpose**: Final hardening, documentation sync, and coverage/performance checks across completed stories.
 
-- [ ] T093 [P] Add CLI quickstart and runtime configuration usage notes in `README.md`
-- [ ] T094 [P] Add additional edge-case tests for malformed RSS entries and missing CoinGecko/FRED fields in `tests/unit/ingest/rss-parse.edge.spec.ts`, `tests/unit/market/coingecko-client.edge.spec.ts`, and `tests/unit/market/fred-client.edge.spec.ts`
-- [ ] T095 Enforce coverage thresholds (`>=75%`, target `80%`) in `vitest.config.ts` and `package.json`
-- [ ] T096 Add fixture-backed manual review performance budget test (<=60s target proxy) in `tests/functional/review-run-performance.spec.ts`
-- [ ] T097 Validate report output contract (section order + filename regex + readability proxy <=1,200 words) against generated reports in `tests/functional/report-output-contract.spec.ts`
-- [ ] T098 [P] Remove dead code and simplify duplicated logic across `src/analysis/`, `src/report/`, and `src/runtime/`
-- [ ] T099 Run quickstart verification and update command examples in `specs/001-morning-market-review-agent/quickstart.md`
+- [x] T093 [P] Add CLI quickstart and runtime configuration usage notes in `README.md`
+- [x] T094 [P] Add additional edge-case tests for malformed RSS entries and missing CoinGecko/FRED fields in `tests/unit/ingest/rss-parse.edge.spec.ts`, `tests/unit/market/coingecko-client.edge.spec.ts`, and `tests/unit/market/fred-client.edge.spec.ts`
+- [x] T095 Enforce coverage thresholds (`>=75%`, target `80%`) in `vitest.config.ts` and `package.json`
+- [x] T096 Add fixture-backed manual review performance budget test (<=60s target proxy) in `tests/functional/review-run-performance.spec.ts`
+- [x] T097 Validate report output contract (section order + filename regex + readability proxy <=1,200 words) against generated reports in `tests/functional/report-output-contract.spec.ts`
+- [x] T098 [P] Remove dead code and simplify duplicated logic across `src/analysis/`, `src/report/`, and `src/runtime/`
+- [x] T099 Run quickstart verification and update command examples in `specs/001-morning-market-review-agent/quickstart.md`
 
 ---
 

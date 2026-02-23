@@ -1,0 +1,22 @@
+[
+  {
+    "id": "btc-usd",
+    "symbol": "BTC",
+    "name": "Bitcoin",
+    "assetClass": "crypto",
+    "provider": "coingecko",
+    "providerKey": "bitcoin",
+    "volumeRelevant": true,
+    "enabled": true
+  },
+  {
+    "id": "eth-usd",
+    "symbol": "ETH",
+    "name": "Ethereum",
+    "assetClass": "crypto",
+    "provider": "coingecko",
+    "providerKey": "ethereum",
+    "volumeRelevant": true,
+    "enabled": true
+  }
+]

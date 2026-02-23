@@ -100,19 +100,25 @@ bun run dev -- config validate
 Unit tests:
 
 ```bash
-bunx vitest run tests/unit
+bun run test:unit
 ```
 
 Functional tests:
 
 ```bash
-bunx vitest run tests/functional
+bun run test:functional
 ```
 
 Coverage gate:
 
 ```bash
-bunx vitest run --coverage
+bun run test:coverage
+```
+
+One scheduler tick for local testing (optional):
+
+```bash
+bun run dev -- scheduler start --time 08:15 --once
 ```
 
 ## Expected Output
@@ -143,3 +149,17 @@ If the LLM binding fails or times out:
 - LLM-dependent sections are omitted
 - The report is marked incomplete
 - The run log records `partial_success` with LLM failure status
+
+## Default Skills (V1)
+
+The repository includes default skill files:
+
+- `skills/sentiment/sentiment-news-price-coherence-v1.md`
+- `skills/outlook/outlook-validation-v1.md`
+- `skills/positioning/position-wording-v1.md`
+
+Validate them with:
+
+```bash
+bun run dev -- config validate
+```

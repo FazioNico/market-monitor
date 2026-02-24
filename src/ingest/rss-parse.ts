@@ -104,6 +104,6 @@ export function parseRssEntries(xml: string, meta: { source: string; category: s
   if ((parsed as any)?.feed) {
     return normalizeAtomEntries(parsed, meta);
   }
-
+  console.error("Unsupported feed format", { parsed, meta });
   throw new ValidationError("Unsupported feed format", ["Expected RSS or Atom XML"]);
 }

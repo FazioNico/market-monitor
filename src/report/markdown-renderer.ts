@@ -78,8 +78,8 @@ export function renderMarketReportMarkdown(input: RenderReportInput): string {
 
   lines.push("## News Summary / RSS Ingestion Summary");
   lines.push(`- Articles after deduplication: ${input.newsItems.length}`);
-  for (const item of input.newsItems.slice(0, 8)) {
-    lines.push(`- [${item.source}] ${item.title} (${item.publishedAt.slice(0, 10)})`);
+  for (const item of input.newsItems.slice(0, 50)) {
+    lines.push(`- [${item.source}] ${item.title} (${item.publishedAt.slice(0, 10)}) [🔗](${item.link})`);
   }
   if (input.newsItems.length === 0) {
     lines.push("- No recent articles in the configured lookback window.");

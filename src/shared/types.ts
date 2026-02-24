@@ -103,6 +103,29 @@ export interface MarketSnapshotItem {
   provider: string;
 }
 
+export type EtfFlowAsset = "btc" | "eth";
+
+export interface EtfFlowDailyRow {
+  date: string;
+  byEtfNetFlowUsdM: Record<string, number | null>;
+  totalNetFlowUsdM: number | null;
+}
+
+export interface EtfFlowDataset {
+  asset: EtfFlowAsset;
+  source: "farside";
+  pageUrl: string;
+  capturedAt: string;
+  etfTickers: string[];
+  rows: EtfFlowDailyRow[];
+}
+
+export interface EtfFlowSnapshot {
+  source: "farside";
+  capturedAt: string;
+  datasets: EtfFlowDataset[];
+}
+
 export interface MacroSeriesObservation {
   seriesId: string;
   label: string;

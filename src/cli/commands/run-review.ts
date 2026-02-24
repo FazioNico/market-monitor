@@ -3,6 +3,7 @@ import { appendRunLogEntry, createStartedRunLogEntry } from "../../runtime/run-l
 import { acquireRunLock, buildRunLockPath } from "../../runtime/run-lock";
 import { ValidationError } from "../../shared/errors";
 import type {
+  EtfFlowSnapshot,
   MacroSeriesObservation,
   MarketSnapshotItem,
   NewsItem,
@@ -19,6 +20,7 @@ import { deduplicateNews } from "../../ingest/deduplicate-news";
 import { fetchRssFeeds } from "../../ingest/rss-fetch";
 import { parseRssEntries } from "../../ingest/rss-parse";
 import { createCoinGeckoClient } from "../../market/coingecko-client";
+import { createFarsideEtfClient } from "../../market/farside-etf-client";
 import { createFredClient } from "../../market/fred-client";
 import { createProviderRegistry } from "../../market/provider-registry";
 import { fetchMacroSeriesContext } from "../../market/macro-series-service";
@@ -234,11 +236,24 @@ export async function runReviewCommand(options: RunReviewCommandOptions = {}): P
       }),
     });
 
-    const marketSnapshot: MarketSnapshotItem[] = await buildMarketSnapshot(
-      watchlist.instruments as WatchlistInstrument[],
-      providers,
-    );
-    const macroContext: MacroSeriesObservation[] = await fetchMacroSeriesContext(providers);
+    const farsideEtfClient = createFarsideEtfClient({
+      fetchFn: options.fetchFn,
+    });
+
+    let etfFlowsError: string | undefined;
+    const [marketSnapshot, macroContext, etfFlowsResult] = await Promise.all([
+      buildMarketSnapshot(watchlist.instruments as WatchlistInstrument[], providers),
+      fetchMacroSeriesContext(providers),
+      farsideEtfClient
+        .fetchEtfFlowSnapshot()
+        .then((value) => ({ ok: true as const, value }))
+        .catch((error) => ({ ok: false as const, error })),
+    ]);
+    const etfFlows: EtfFlowSnapshot | undefined = etfFlowsResult.ok ? etfFlowsResult.value : undefined;
+    if (!etfFlowsResult.ok) {
+      etfFlowsError = describeLlmError(etfFlowsResult.error);
+      logger.error(`ETF flow scraping failure (Farside): ${etfFlowsError}`);
+    }
 
     const regime = detectRegime({ marketSnapshot, macroContext });
     let reportStatus: "complete" | "incomplete" = "complete";
@@ -362,7 +377,7 @@ export async function runReviewCommand(options: RunReviewCommandOptions = {}): P
       triggerType: parsedArgs.triggerType,
       generatedAt,
       status: reportStatus,
-      dataSources: ["RSS", "CoinGecko", "FRED"],
+      dataSources: ["RSS", "CoinGecko", "FRED", ...(etfFlows ? ["Farside"] : [])],
       omissionReasons,
     });
 
@@ -381,9 +396,16 @@ export async function runReviewCommand(options: RunReviewCommandOptions = {}): P
       outlook,
       riskInvalidation,
       positionWording,
+      etfFlows,
       diagnostics: [
         `Feeds processed: ${feedCatalog.entries.length}`,
         `Watchlist enabled: ${watchlist.instruments.length}`,
+        `ETF flow datasets: ${etfFlows?.datasets.length ?? 0}`,
+        ...(etfFlows
+          ? etfFlows.datasets.map(
+              (dataset) => `ETF ${dataset.asset.toUpperCase()} rows=${dataset.rows.length} tickers=${dataset.etfTickers.length}`,
+            )
+          : []),
         `Skills enabled: ${enabledSkills.length}`,
         `Top article picks method: ${enrichedTopArticlesToRead.method}`,
         `Top article picks selected: ${enrichedTopArticlesToRead.items.length}`,
@@ -394,6 +416,7 @@ export async function runReviewCommand(options: RunReviewCommandOptions = {}): P
         ...(topArticlesSummaryEnrichmentError
           ? [`Top article summary enrichment error: ${topArticlesSummaryEnrichmentError}`]
           : []),
+        ...(etfFlowsError ? [`ETF flow scraping error (Farside): ${etfFlowsError}`] : []),
       ],
     });
     if (reportFormatSkill) {
@@ -431,10 +454,12 @@ export async function runReviewCommand(options: RunReviewCommandOptions = {}): P
         `news_items=${newsItems.length}`,
         `market_snapshot=${marketSnapshot.length}`,
         `macro_context=${macroContext.length}`,
+        `etf_flow_datasets=${etfFlows?.datasets.length ?? 0}`,
         ...(omissionReasons.length > 0 ? [`omissions=${omissionReasons.join("|")}`] : []),
         ...(sentimentLlmError ? [`llm_sentiment_error=${sentimentLlmError}`] : []),
         ...(topArticlesLlmError ? [`llm_top_articles_error=${topArticlesLlmError}`] : []),
         ...(positionLlmError ? [`llm_position_error=${positionLlmError}`] : []),
+        ...(etfFlowsError ? [`etf_flow_scrape_error=${etfFlowsError}`] : []),
       ],
     });
 

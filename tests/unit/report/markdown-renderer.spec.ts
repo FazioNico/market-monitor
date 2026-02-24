@@ -79,6 +79,7 @@ describe("markdown renderer", () => {
       "## Report Metadata",
       "## Top 20 Articles to Read (Prioritized)",
       "## Market Snapshot",
+      "## ETF Flows",
       "## Regime Detection",
       "## Sentiment Scoring",
       "## Probabilistic Outlook",
@@ -99,6 +100,8 @@ describe("markdown renderer", () => {
     expect(markdown).toContain("report status: complete");
     expect(markdown).toContain("trigger type: manual");
     expect(markdown).toContain("data source summary: RSS, CoinGecko, FRED");
+    expect(markdown).toContain("## ETF Flows");
+    expect(markdown).toContain("No ETF flow data available.");
     expect(markdown).toContain("Method: llm_chunked");
     expect(markdown).toContain(
       "| Rank | Source | Date | Article | Article Summary | Relevance | Sentiment | Market | Behavior | Horizon | Why Read |",

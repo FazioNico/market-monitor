@@ -1,4 +1,6 @@
 import type {
+  EtfFlowDataset,
+  EtfFlowSnapshot,
   MacroSeriesObservation,
   MarketSnapshotItem,
   NewsReadingPriorityList,
@@ -26,11 +28,157 @@ export interface RenderReportInput {
   outlook: OutlookDistribution;
   riskInvalidation: RiskInvalidationBlock;
   positionWording: PositionWordingBlock;
+  etfFlows?: EtfFlowSnapshot;
   diagnostics?: string[];
 }
 
 function formatPct(value: number): string {
   return `${value >= 0 ? "+" : ""}${value.toFixed(2)}%`;
+}
+
+function formatUsdMillions(value: number): string {
+  return `${value >= 0 ? "+" : "-"}$${Math.abs(value).toFixed(1)}m`;
+}
+
+function getRowTotalNetFlowUsdM(row: EtfFlowDataset["rows"][number]): number | null {
+  if (row.totalNetFlowUsdM !== null) {
+    return row.totalNetFlowUsdM;
+  }
+  const numericValues = Object.values(row.byEtfNetFlowUsdM).filter((value): value is number => typeof value === "number");
+  if (numericValues.length === 0) {
+    return null;
+  }
+  return numericValues.reduce((sum, value) => sum + value, 0);
+}
+
+function computeRecentCumulativeNetFlow(dataset: EtfFlowDataset, dayCount: number): number | null {
+  const totals = dataset.rows
+    .map((row) => getRowTotalNetFlowUsdM(row))
+    .filter((value): value is number => typeof value === "number")
+    .slice(-dayCount);
+
+  if (totals.length === 0) {
+    return null;
+  }
+  return totals.reduce((sum, value) => sum + value, 0);
+}
+
+function computeFlowStreak(dataset: EtfFlowDataset): string {
+  let direction: "inflow" | "outflow" | undefined;
+  let count = 0;
+
+  for (let index = dataset.rows.length - 1; index >= 0; index -= 1) {
+    const total = getRowTotalNetFlowUsdM(dataset.rows[index]!);
+    if (typeof total !== "number" || total === 0) {
+      break;
+    }
+
+    const currentDirection = total > 0 ? "inflow" : "outflow";
+    if (!direction) {
+      direction = currentDirection;
+      count = 1;
+      continue;
+    }
+
+    if (currentDirection !== direction) {
+      break;
+    }
+    count += 1;
+  }
+
+  if (!direction || count === 0) {
+    return "No active streak";
+  }
+
+  return `${count} trading day${count > 1 ? "s" : ""} ${direction}`;
+}
+
+function renderEtfFlowDatasetSection(dataset: EtfFlowDataset): string[] {
+  const lines: string[] = [];
+  const latestRow = dataset.rows[dataset.rows.length - 1];
+
+  lines.push(`### ${dataset.asset.toUpperCase()} Spot ETF Flows (Farside)`);
+
+  if (!latestRow) {
+    lines.push("- No rows parsed.");
+    return lines;
+  }
+
+  const latestTotal = getRowTotalNetFlowUsdM(latestRow);
+  const cumulative5d = computeRecentCumulativeNetFlow(dataset, 5);
+  const cumulative20d = computeRecentCumulativeNetFlow(dataset, 20);
+  const latestEtfEntries = dataset.etfTickers.map((ticker) => ({
+    ticker,
+    value: latestRow.byEtfNetFlowUsdM[ticker] ?? null,
+  }));
+  const positiveEntries = latestEtfEntries.filter((entry) => typeof entry.value === "number" && entry.value > 0);
+  const negativeEntries = latestEtfEntries.filter((entry) => typeof entry.value === "number" && entry.value < 0);
+  const topInflow = positiveEntries.reduce<typeof positiveEntries[number] | undefined>(
+    (best, entry) => (!best || (entry.value as number) > (best.value as number) ? entry : best),
+    undefined,
+  );
+  const topOutflow = negativeEntries.reduce<typeof negativeEntries[number] | undefined>(
+    (worst, entry) => (!worst || (entry.value as number) < (worst.value as number) ? entry : worst),
+    undefined,
+  );
+
+  lines.push(`- Source page: ${dataset.pageUrl}`);
+  lines.push(`- Latest trading day: ${latestRow.date}`);
+  lines.push(`- Net flow total: ${latestTotal === null ? "N/A" : formatUsdMillions(latestTotal)}`);
+  lines.push(`- Cumulative 5d: ${cumulative5d === null ? "N/A" : formatUsdMillions(cumulative5d)}`);
+  lines.push(`- Cumulative 20d: ${cumulative20d === null ? "N/A" : formatUsdMillions(cumulative20d)}`);
+  lines.push(`- Streak: ${computeFlowStreak(dataset)}`);
+  lines.push(`- ETFs positive / negative: ${positiveEntries.length} / ${negativeEntries.length}`);
+  if (topInflow && typeof topInflow.value === "number") {
+    lines.push(`- Top inflow ETF: ${topInflow.ticker} (${formatUsdMillions(topInflow.value)})`);
+  }
+  if (topOutflow && typeof topOutflow.value === "number") {
+    lines.push(`- Top outflow ETF: ${topOutflow.ticker} (${formatUsdMillions(topOutflow.value)})`);
+  }
+
+  lines.push("");
+  lines.push(buildMarkdownTableRow(["ETF", "Latest Net Flow (US$m)", "Direction"]));
+  lines.push(buildMarkdownTableRow(["---", "---", "---"]));
+  for (const entry of latestEtfEntries) {
+    const direction =
+      entry.value === null ? "n/a" : entry.value > 0 ? "inflow" : entry.value < 0 ? "outflow" : "flat";
+    lines.push(
+      buildMarkdownTableRow([
+        entry.ticker,
+        entry.value === null ? "N/A" : entry.value.toFixed(1),
+        direction,
+      ]),
+    );
+  }
+  lines.push(
+    buildMarkdownTableRow([
+      "Total",
+      latestTotal === null ? "N/A" : latestTotal.toFixed(1),
+      latestTotal === null ? "n/a" : latestTotal > 0 ? "inflow" : latestTotal < 0 ? "outflow" : "flat",
+    ]),
+  );
+
+  return lines;
+}
+
+function renderEtfFlowsSection(etfFlows: EtfFlowSnapshot | undefined): string[] {
+  const lines: string[] = [];
+  lines.push("## ETF Flows");
+
+  if (!etfFlows || etfFlows.datasets.length === 0) {
+    lines.push("- No ETF flow data available.");
+    return lines;
+  }
+
+  lines.push(`- Source: ${etfFlows.source} (scraped)`);
+  lines.push(`- Captured at: ${etfFlows.capturedAt}`);
+
+  for (const dataset of etfFlows.datasets) {
+    lines.push("");
+    lines.push(...renderEtfFlowDatasetSection(dataset));
+  }
+
+  return lines;
 }
 
 function findOmissionReason(omissionReasons: string[] | undefined, keyword: string): string {
@@ -168,6 +316,9 @@ export function renderMarketReportMarkdown(input: RenderReportInput): string {
   if (input.marketSnapshot.length === 0) {
     lines.push("- No market snapshot data available.");
   }
+  lines.push("");
+
+  lines.push(...renderEtfFlowsSection(input.etfFlows));
   lines.push("");
 
   lines.push("## Regime Detection");

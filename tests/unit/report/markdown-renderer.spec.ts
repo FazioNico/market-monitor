@@ -102,11 +102,22 @@ describe("markdown renderer", () => {
     expect(markdown).toContain("## 7. Flow & ETF Data");
     expect(markdown).toContain("No ETF flow data available.");
     expect(markdown).toContain("Method: llm_chunked");
+    expect(markdown).not.toContain("| Rank | Source | Date | Article |");
+    expect(markdown).toContain("---");
+    expect(markdown).toContain("[ETF flow regime shifts as BTC volatility compresses](<https://example.com/top-article>)");
     expect(markdown).toContain(
-      "| Rank | Source | Date | Article | Article Summary | Relevance | Sentiment | Market | Behavior | Horizon | Why Read |",
+      "[Relevance: 8.9/10 | Sentiment: high | Market: high | Horizon: intraday to 2 days]",
     );
+    expect(markdown).toContain("Behavior: high");
+    expect(markdown).toContain("Source: Example");
+    expect(markdown).toContain("Date: 2026-02-23");
+    expect(markdown).toContain("Summary:");
     expect(markdown).toContain(
-      "| 1 | Example | 2026-02-23 | [ETF flow regime shifts as BTC volatility compresses](<https://example.com/top-article>) | BTC volatility compressed while ETF flow expectations improved, making this headline relevant for near-term sentiment and positioning shifts. | 8.9/10 | high | high | high | intraday to 2 days |",
+      "BTC volatility compressed while ETF flow expectations improved, making this headline relevant for near-term sentiment and positioning shifts.",
+    );
+    expect(markdown).toContain("Why read:");
+    expect(markdown).toContain(
+      "Flow and positioning implications can quickly alter sentiment and near-term price behavior.",
     );
   });
 

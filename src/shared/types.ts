@@ -164,6 +164,7 @@ export interface PrioritizedNewsItem {
   source: string;
   publishedAt: string;
   link: string;
+  imageUrl?: string;
   category: string;
   relevanceScore: number;
   sentimentImpact: NewsImpactLevel;

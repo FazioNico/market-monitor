@@ -193,6 +193,20 @@ function buildMarkdownTableRow(cells: string[]): string {
   return `| ${cells.map(escapeMarkdownTableCell).join(" | ")} |`;
 }
 
+function getOptionalArticleImageUrl(item: NewsReadingPriorityList["items"][number]): string | undefined {
+  const raw = item as unknown as Record<string, unknown>;
+  const candidateFields = ["imageUrl", "image", "image_url", "thumbnailUrl", "thumbnail", "thumbnail_url"];
+
+  for (const field of candidateFields) {
+    const value = raw[field];
+    if (typeof value === "string" && value.trim().length > 0) {
+      return value.trim();
+    }
+  }
+
+  return undefined;
+}
+
 function renderPositionWording(positionWording: PositionWordingBlock, omissionReasons?: string[]): string {
   if (positionWording.status !== "complete") {
     return `Section omitted: ${findOmissionReason(omissionReasons, "position")}.\n`;
@@ -511,54 +525,28 @@ function renderTopArticlesToReadSection(
     return lines;
   }
 
-  lines.push("");
-  lines.push(
-    buildMarkdownTableRow([
-      "Rank",
-      "Source",
-      "Date",
-      "Article",
-      "Article Summary",
-      "Relevance",
-      "Sentiment",
-      "Market",
-      "Behavior",
-      "Horizon",
-      "Why Read",
-    ]),
-  );
-  lines.push(
-    buildMarkdownTableRow([
-      "---",
-      "---",
-      "---",
-      "---",
-      "---",
-      "---",
-      "---",
-      "---",
-      "---",
-      "---",
-      "---",
-    ]),
-  );
-
   for (const item of topArticlesToRead.items) {
+    const imageUrl = getOptionalArticleImageUrl(item);
+
+    lines.push("");
+    lines.push("---");
+    if (imageUrl) {
+      lines.push(`![${item.title}](<${imageUrl}>)`);
+    }
+    lines.push(`[${item.title}](<${item.link}>)`);
     lines.push(
-      buildMarkdownTableRow([
-        String(item.rank),
-        item.source,
-        item.publishedAt.slice(0, 10),
-        `[${item.title}](<${item.link}>)`,
-        item.articleSummary ?? "N/A",
-        `${item.relevanceScore.toFixed(1)}/10`,
-        item.sentimentImpact,
-        item.marketImpact,
-        item.investorBehaviorImpact,
-        item.timeHorizon,
-        item.rationale,
-      ]),
+      `[Relevance: ${item.relevanceScore.toFixed(1)}/10 | Sentiment: ${item.sentimentImpact} | Market: ${item.marketImpact} | Horizon: ${item.timeHorizon}]`,
     );
+    lines.push(`Behavior: ${item.investorBehaviorImpact}`);
+    lines.push(`Source: ${item.source}`);
+    lines.push(`Date: ${item.publishedAt.slice(0, 10)}`);
+    lines.push("");
+    lines.push("Summary:");
+    lines.push(item.articleSummary ?? "N/A");
+    lines.push("");
+    lines.push("Why read:");
+    lines.push(item.rationale);
+    lines.push("---");
   }
 
   return lines;

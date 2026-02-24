@@ -7,6 +7,7 @@
     "dev": "bun src/index.ts",
     "build": "bunx tsc --noEmit",
     "start": "bun src/index.ts",
+    "start:report": "bun run dev -- review run",
     "test": "bunx vitest run",
     "test:unit": "bunx vitest run tests/unit",
     "test:functional": "bunx vitest run tests/functional",

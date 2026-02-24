@@ -46,6 +46,8 @@ describe("markdown renderer", () => {
             investorBehaviorImpact: "high",
             timeHorizon: "intraday to 2 days",
             rationale: "Flow and positioning implications can quickly alter sentiment and near-term price behavior.",
+            articleSummary:
+              "BTC volatility compressed while ETF flow expectations improved, making this headline relevant for near-term sentiment and positioning shifts.",
           },
         ],
         notes: ["LLM evaluated a prefiltered candidate pool (200) from 742 extracted articles."],
@@ -75,15 +77,15 @@ describe("markdown renderer", () => {
 
     const expectedHeadings = [
       "## Report Metadata",
-      "## News Summary / RSS Ingestion Summary",
+      "## Top 20 Articles to Read (Prioritized)",
       "## Market Snapshot",
       "## Regime Detection",
       "## Sentiment Scoring",
-      "## Top 20 Articles to Read (Prioritized)",
       "## Probabilistic Outlook",
       "## Risk & Invalidation",
       "## Position Wording",
       "## Run Notes / Diagnostics",
+      "## News Summary / RSS Ingestion Summary",
     ];
 
     let cursor = -1;
@@ -98,8 +100,12 @@ describe("markdown renderer", () => {
     expect(markdown).toContain("trigger type: manual");
     expect(markdown).toContain("data source summary: RSS, CoinGecko, FRED");
     expect(markdown).toContain("Method: llm_chunked");
-    expect(markdown).toContain("| Rank | Source | Date | Article | Relevance | Sentiment | Market | Behavior | Horizon | Why Read |");
-    expect(markdown).toContain("| 1 | Example | 2026-02-23 | [ETF flow regime shifts as BTC volatility compresses](<https://example.com/top-article>) | 8.9/10 | high | high | high | intraday to 2 days |");
+    expect(markdown).toContain(
+      "| Rank | Source | Date | Article | Article Summary | Relevance | Sentiment | Market | Behavior | Horizon | Why Read |",
+    );
+    expect(markdown).toContain(
+      "| 1 | Example | 2026-02-23 | [ETF flow regime shifts as BTC volatility compresses](<https://example.com/top-article>) | BTC volatility compressed while ETF flow expectations improved, making this headline relevant for near-term sentiment and positioning shifts. | 8.9/10 | high | high | high | intraday to 2 days |",
+    );
   });
 
   it("renders incomplete metadata and omission reasons", () => {

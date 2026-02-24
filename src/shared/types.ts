@@ -148,6 +148,7 @@ export interface PrioritizedNewsItem {
   investorBehaviorImpact: NewsImpactLevel;
   timeHorizon: string;
   rationale: string;
+  articleSummary?: string;
 }
 
 export interface NewsReadingPriorityList {

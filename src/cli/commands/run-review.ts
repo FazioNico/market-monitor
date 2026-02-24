@@ -29,6 +29,7 @@ import {
   type SentimentServiceOptions,
 } from "../../analysis/sentiment-service";
 import { buildNewsReadingPriorityList } from "../../analysis/news-reading-priority";
+import { enrichTopArticlesWithContentSummaries } from "../../analysis/top-article-content-summary";
 import { buildOutlookDistribution } from "../../analysis/outlook-service";
 import { buildRiskInvalidation } from "../../analysis/risk-invalidation";
 import {
@@ -290,6 +291,35 @@ export async function runReviewCommand(options: RunReviewCommandOptions = {}): P
     if (topArticlesLlmError) {
       logger.error(`LLM top article ranking failure: ${topArticlesLlmError}`);
     }
+    let topArticlesSummaryEnrichmentError: string | undefined;
+    let topArticlesSummaryLlmError: string | undefined;
+    let topArticleSummaryStats = {
+      total: topArticlesToRead.items.length,
+      fromArticleContent: 0,
+      fromRssFallback: 0,
+      unavailable: topArticlesToRead.items.length,
+      fetchErrors: 0,
+      llmSummaries: 0,
+      llmErrors: 0,
+    };
+    let enrichedTopArticlesToRead = topArticlesToRead;
+    try {
+      const summaryEnrichment = await enrichTopArticlesWithContentSummaries(
+        { topArticlesToRead, newsItems },
+        {
+          fetchFn: options.fetchFn,
+          llmInvoke,
+          onLlmError: (error) => {
+            topArticlesSummaryLlmError ??= describeLlmError(error);
+          },
+        },
+      );
+      enrichedTopArticlesToRead = summaryEnrichment.topArticlesToRead;
+      topArticleSummaryStats = summaryEnrichment.stats;
+    } catch (error) {
+      topArticlesSummaryEnrichmentError = describeLlmError(error);
+      logger.error(`Top article summary enrichment failure: ${topArticlesSummaryEnrichmentError}`);
+    }
     let outlook = buildOutlookDistribution({ regime, sentiment });
     if (outlookValidationSkill) {
       const validated = (await bindingRegistry.execute(outlookValidationSkill, { outlook })) as {
@@ -347,7 +377,7 @@ export async function runReviewCommand(options: RunReviewCommandOptions = {}): P
       macroContext,
       regime,
       sentiment,
-      topArticlesToRead,
+      topArticlesToRead: enrichedTopArticlesToRead,
       outlook,
       riskInvalidation,
       positionWording,
@@ -355,10 +385,15 @@ export async function runReviewCommand(options: RunReviewCommandOptions = {}): P
         `Feeds processed: ${feedCatalog.entries.length}`,
         `Watchlist enabled: ${watchlist.instruments.length}`,
         `Skills enabled: ${enabledSkills.length}`,
-        `Top article picks method: ${topArticlesToRead.method}`,
-        `Top article picks selected: ${topArticlesToRead.items.length}`,
-        `Top article candidate pool: ${topArticlesToRead.candidateNewsEvaluated}/${topArticlesToRead.totalNewsEvaluated}`,
+        `Top article picks method: ${enrichedTopArticlesToRead.method}`,
+        `Top article picks selected: ${enrichedTopArticlesToRead.items.length}`,
+        `Top article candidate pool: ${enrichedTopArticlesToRead.candidateNewsEvaluated}/${enrichedTopArticlesToRead.totalNewsEvaluated}`,
+        `Top article content summaries: article=${topArticleSummaryStats.fromArticleContent}, llm=${topArticleSummaryStats.llmSummaries}, rss_fallback=${topArticleSummaryStats.fromRssFallback}, unavailable=${topArticleSummaryStats.unavailable}, fetch_errors=${topArticleSummaryStats.fetchErrors}, llm_errors=${topArticleSummaryStats.llmErrors}`,
         ...(topArticlesLlmError ? [`Top article ranking LLM error: ${topArticlesLlmError}`] : []),
+        ...(topArticlesSummaryLlmError ? [`Top article summary LLM error: ${topArticlesSummaryLlmError}`] : []),
+        ...(topArticlesSummaryEnrichmentError
+          ? [`Top article summary enrichment error: ${topArticlesSummaryEnrichmentError}`]
+          : []),
       ],
     });
     if (reportFormatSkill) {

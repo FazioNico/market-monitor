@@ -95,6 +95,7 @@ function renderTopArticlesToReadSection(
       "Source",
       "Date",
       "Article",
+      "Article Summary",
       "Relevance",
       "Sentiment",
       "Market",
@@ -115,6 +116,7 @@ function renderTopArticlesToReadSection(
       "---",
       "---",
       "---",
+      "---",
     ]),
   );
 
@@ -125,6 +127,7 @@ function renderTopArticlesToReadSection(
         item.source,
         item.publishedAt.slice(0, 10),
         `[${item.title}](<${item.link}>)`,
+        item.articleSummary ?? "N/A",
         `${item.relevanceScore.toFixed(1)}/10`,
         item.sentimentImpact,
         item.marketImpact,

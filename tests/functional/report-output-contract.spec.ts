@@ -65,17 +65,16 @@ describe("report output contract", () => {
 
       const markdown = await readFile(workspace.path("reports", reports[0]!), "utf8");
       const headings = [
-        "## Report Metadata",
-        "## Top 20 Articles to Read (Prioritized)",
-        "## Market Snapshot",
-        "## ETF Flows",
-        "## Regime Detection",
-        "## Sentiment Scoring",
-        "## Probabilistic Outlook",
-        "## Risk & Invalidation",
-        "## Position Wording",
-        "## Run Notes / Diagnostics",
-        "## News Summary / RSS Ingestion Summary",
+        "## 0. Metadata",
+        "## 1. Executive Summary",
+        "## 2. Market Regime & Position Wording",
+        "## 3. Risk & Invalidation / Sentiment Score",
+        "## 4. Tactical Positioning & Probabilistic Outlook",
+        "## 5. Macro Dashboard",
+        "## 6. Crypto Dashboard",
+        "## 7. Flow & ETF Data",
+        "## 8. Top 20 News (scored + classified)",
+        "## 9. Sources & References",
       ];
       let cursor = -1;
       for (const heading of headings) {

@@ -93,11 +93,11 @@ default_lookback_hours: 48
       expect(reports[0]).toMatch(/^\d{4}-\d{2}-\d{2}-\d{2}-\d{2}_market-report\.md$/);
 
       const markdown = await readFile(workspace.path("reports", reports[0]!), "utf8");
-      expect(markdown).toContain("## Market Snapshot");
-      expect(markdown).toContain("## Regime Detection");
-      expect(markdown).toContain("## Probabilistic Outlook");
-      expect(markdown).toContain("## Risk & Invalidation");
-      expect(markdown).toContain("## Position Wording");
+      expect(markdown).toContain("## 2. Market Regime & Position Wording");
+      expect(markdown).toContain("## 3. Risk & Invalidation / Sentiment Score");
+      expect(markdown).toContain("## 4. Tactical Positioning & Probabilistic Outlook");
+      expect(markdown).toContain("## 5. Macro Dashboard");
+      expect(markdown).toContain("## 6. Crypto Dashboard");
       expect(markdown).toContain("CPI=");
 
       const entries = await readRunLogEntries(workspace.path("logs", "runs.jsonl"));

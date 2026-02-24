@@ -24,15 +24,16 @@ Notes:
 
 ## Required Sections (Ordered)
 
-1. Report Metadata
-2. News Summary / RSS Ingestion Summary
-3. Market Snapshot
-4. Regime Detection
-5. Sentiment Scoring
-6. Probabilistic Outlook
-7. Risk & Invalidation
-8. Position Wording
-9. Run Notes / Diagnostics (optional but recommended)
+0. Metadata
+1. Executive Summary
+2. Market Regime & Position Wording
+3. Risk & Invalidation / Sentiment Score
+4. Tactical Positioning & Probabilistic Outlook
+5. Macro Dashboard
+6. Crypto Dashboard
+7. Flow & ETF Data
+8. Top 20 News (scored + classified)
+9. Sources & References
 
 ## Required Metadata Fields (Markdown)
 
@@ -67,7 +68,7 @@ When present, Position Wording must include:
 - No-trade zones
 - Time horizon
 
-If omitted in an incomplete report, the section heading still exists and states the omission reason.
+If omitted in an incomplete report, the `Position Wording` subsection still exists and states the omission reason.
 
 ## Readability Proxy (V1)
 

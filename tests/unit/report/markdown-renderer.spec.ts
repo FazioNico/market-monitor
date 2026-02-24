@@ -76,17 +76,16 @@ describe("markdown renderer", () => {
     });
 
     const expectedHeadings = [
-      "## Report Metadata",
-      "## Top 20 Articles to Read (Prioritized)",
-      "## Market Snapshot",
-      "## ETF Flows",
-      "## Regime Detection",
-      "## Sentiment Scoring",
-      "## Probabilistic Outlook",
-      "## Risk & Invalidation",
-      "## Position Wording",
-      "## Run Notes / Diagnostics",
-      "## News Summary / RSS Ingestion Summary",
+      "## 0. Metadata",
+      "## 1. Executive Summary",
+      "## 2. Market Regime & Position Wording",
+      "## 3. Risk & Invalidation / Sentiment Score",
+      "## 4. Tactical Positioning & Probabilistic Outlook",
+      "## 5. Macro Dashboard",
+      "## 6. Crypto Dashboard",
+      "## 7. Flow & ETF Data",
+      "## 8. Top 20 News (scored + classified)",
+      "## 9. Sources & References",
     ];
 
     let cursor = -1;
@@ -100,7 +99,7 @@ describe("markdown renderer", () => {
     expect(markdown).toContain("report status: complete");
     expect(markdown).toContain("trigger type: manual");
     expect(markdown).toContain("data source summary: RSS, CoinGecko, FRED");
-    expect(markdown).toContain("## ETF Flows");
+    expect(markdown).toContain("## 7. Flow & ETF Data");
     expect(markdown).toContain("No ETF flow data available.");
     expect(markdown).toContain("Method: llm_chunked");
     expect(markdown).toContain(
@@ -207,8 +206,8 @@ describe("markdown renderer", () => {
       },
     });
 
-    expect(markdown).toContain("\n## Report Metadata\n");
-    expect(markdown).toContain("\n## News Summary / RSS Ingestion Summary\n");
+    expect(markdown).toContain("\n## 0. Metadata\n");
+    expect(markdown).toContain("\n## 9. Sources & References\n");
     expect(markdown.split("\n").length).toBeGreaterThan(5);
     expect(markdown).toContain(longText);
     expect(markdown.trimEnd().endsWith("…")).toBe(false);

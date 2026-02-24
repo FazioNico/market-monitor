@@ -533,20 +533,20 @@ function renderTopArticlesToReadSection(
     if (imageUrl) {
       lines.push(`![${item.title}](<${imageUrl}>)`);
     }
-    lines.push(`[${item.title}](<${item.link}>)`);
+    lines.push(`**[${item.title}](<${item.link}>)**`);
+    lines.push("");
     lines.push(
-      `[Relevance: ${item.relevanceScore.toFixed(1)}/10 | Sentiment: ${item.sentimentImpact} | Market: ${item.marketImpact} | Horizon: ${item.timeHorizon}]`,
+      `Relevance: ${item.relevanceScore.toFixed(1)}/10 | Sentiment: ${item.sentimentImpact} | Market: ${item.marketImpact} | Horizon: ${item.timeHorizon} Behavior: ${item.investorBehaviorImpact}`,
     );
-    lines.push(`Behavior: ${item.investorBehaviorImpact}`);
-    lines.push(`Source: ${item.source}`);
-    lines.push(`Date: ${item.publishedAt.slice(0, 10)}`);
+    lines.push("");
+    lines.push(`Source: ${item.source} | Date: ${item.publishedAt.slice(0, 10)}`);
     lines.push("");
     lines.push("Summary:");
     lines.push(item.articleSummary ?? "N/A");
     lines.push("");
     lines.push("Why read:");
     lines.push(item.rationale);
-    lines.push("---");
+    lines.push("");
   }
 
   return lines;

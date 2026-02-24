@@ -41,6 +41,7 @@ import {
 import { createBindingRegistry } from "../../skills/binding-registry";
 import { loadSkillsFromDirectory } from "../../skills/skill-loader";
 import { createOllamaInvoke } from "../../llm/ollama-client";
+import { createCliProgressIndicator } from "../progress-indicator";
 
 type Logger = Pick<typeof console, "log" | "error">;
 
@@ -136,8 +137,15 @@ export async function runReviewCommand(options: RunReviewCommandOptions = {}): P
   }
 
   const runId = createRunId();
+  const progress = createCliProgressIndicator({
+    logger,
+    label: "Generating market review",
+  });
 
   try {
+    progress.start();
+    progress.setLabel("Loading config and skills");
+
     const context = createAppContext({
       cwd: options.cwd,
       env: options.env,
@@ -174,6 +182,7 @@ export async function runReviewCommand(options: RunReviewCommandOptions = {}): P
     const positioningSkill = enabledSkills.find((skill) => skill.type === "positioning");
 
     if (parsedArgs.triggerType === "scheduled" && options.scheduleSlotKey) {
+      progress.setLabel("Checking scheduled run lock");
       const reviewSlotLockPath = buildRunLockPath(`${context.paths.logsDir}/review-slots`, options.scheduleSlotKey);
       const slotLock = await acquireRunLock({
         lockPath: reviewSlotLockPath,
@@ -196,6 +205,7 @@ export async function runReviewCommand(options: RunReviewCommandOptions = {}): P
       }
     }
 
+    progress.setLabel("Initializing run log");
     await appendRunLogEntry(
       context.paths.runLogPath,
       createStartedRunLogEntry({
@@ -206,6 +216,7 @@ export async function runReviewCommand(options: RunReviewCommandOptions = {}): P
       }),
     );
 
+    progress.setLabel("Fetching RSS feeds");
     const rssResponses = await fetchRssFeeds(feedCatalog.entries, {
       fetchFn: options.fetchFn,
       now: baseDate,
@@ -241,6 +252,7 @@ export async function runReviewCommand(options: RunReviewCommandOptions = {}): P
     });
 
     let etfFlowsError: string | undefined;
+    progress.setLabel("Fetching market and macro data");
     const [marketSnapshot, macroContext, etfFlowsResult] = await Promise.all([
       buildMarketSnapshot(watchlist.instruments as WatchlistInstrument[], providers),
       fetchMacroSeriesContext(providers),
@@ -252,7 +264,7 @@ export async function runReviewCommand(options: RunReviewCommandOptions = {}): P
     const etfFlows: EtfFlowSnapshot | undefined = etfFlowsResult.ok ? etfFlowsResult.value : undefined;
     if (!etfFlowsResult.ok) {
       etfFlowsError = describeLlmError(etfFlowsResult.error);
-      logger.error(`ETF flow scraping failure (Farside): ${etfFlowsError}`);
+      progress.error(`ETF flow scraping failure (Farside): ${etfFlowsError}`);
     }
 
     const regime = detectRegime({ marketSnapshot, macroContext });
@@ -262,6 +274,7 @@ export async function runReviewCommand(options: RunReviewCommandOptions = {}): P
     let topArticlesLlmError: string | undefined;
     let positionLlmError: string | undefined;
 
+    progress.setLabel("Analyzing sentiment");
     const sentiment = await generateSentimentAssessment(
       { newsItems, marketSnapshot, regime },
       sentimentSkill
@@ -287,8 +300,10 @@ export async function runReviewCommand(options: RunReviewCommandOptions = {}): P
         ? `LLM sentiment failure: ${sentimentLlmError}`
         : "LLM sentiment failure";
       omissionReasons.push(reason);
-      logger.error(reason);
+      progress.error(reason);
     }
+
+    progress.setLabel("Ranking top articles");
     const topArticlesToRead = await buildNewsReadingPriorityList(
       { newsItems, marketSnapshot, regime, sentiment },
       {
@@ -304,7 +319,7 @@ export async function runReviewCommand(options: RunReviewCommandOptions = {}): P
       },
     );
     if (topArticlesLlmError) {
-      logger.error(`LLM top article ranking failure: ${topArticlesLlmError}`);
+      progress.error(`LLM top article ranking failure: ${topArticlesLlmError}`);
     }
     let topArticlesSummaryEnrichmentError: string | undefined;
     let topArticlesSummaryLlmError: string | undefined;
@@ -319,6 +334,7 @@ export async function runReviewCommand(options: RunReviewCommandOptions = {}): P
     };
     let enrichedTopArticlesToRead = topArticlesToRead;
     try {
+      progress.setLabel("Summarizing top articles");
       const summaryEnrichment = await enrichTopArticlesWithContentSummaries(
         { topArticlesToRead, newsItems },
         {
@@ -333,7 +349,7 @@ export async function runReviewCommand(options: RunReviewCommandOptions = {}): P
       topArticleSummaryStats = summaryEnrichment.stats;
     } catch (error) {
       topArticlesSummaryEnrichmentError = describeLlmError(error);
-      logger.error(`Top article summary enrichment failure: ${topArticlesSummaryEnrichmentError}`);
+      progress.error(`Top article summary enrichment failure: ${topArticlesSummaryEnrichmentError}`);
     }
     let outlook = buildOutlookDistribution({ regime, sentiment });
     if (outlookValidationSkill) {
@@ -344,6 +360,7 @@ export async function runReviewCommand(options: RunReviewCommandOptions = {}): P
       outlook = validated.outlook;
     }
     const riskInvalidation = buildRiskInvalidation({ regime, marketSnapshot, macroContext });
+    progress.setLabel("Generating positioning guidance");
     const positionWording = await buildPositionWording(
       { regime, outlook },
       positioningSkill
@@ -369,7 +386,7 @@ export async function runReviewCommand(options: RunReviewCommandOptions = {}): P
         ? `LLM position wording failure: ${positionLlmError}`
         : "LLM position wording failure";
       omissionReasons.push(reason);
-      logger.error(reason);
+      progress.error(reason);
     }
 
     const metadata = createReportMetadata({
@@ -420,6 +437,7 @@ export async function runReviewCommand(options: RunReviewCommandOptions = {}): P
       ],
     });
     if (reportFormatSkill) {
+      progress.setLabel("Validating report format");
       const reportFormatCheck = (await bindingRegistry.execute(reportFormatSkill, { markdown })) as {
         valid: boolean;
         issues: string[];
@@ -429,12 +447,14 @@ export async function runReviewCommand(options: RunReviewCommandOptions = {}): P
       }
     }
 
+    progress.setLabel("Writing report file");
     const reportResult = await writeMarketReportFile({
       reportsDir: context.paths.reportsDir,
       markdown,
       baseDate,
     });
 
+    progress.setLabel("Finalizing run log");
     await appendRunLogEntry(context.paths.runLogPath, {
       runId,
       triggerType: parsedArgs.triggerType,
@@ -463,11 +483,14 @@ export async function runReviewCommand(options: RunReviewCommandOptions = {}): P
       ],
     });
 
-    logger.log(`Report written: ${reportResult.filePath}`);
+    const elapsed = progress.elapsedLabel();
+    progress.stop();
+    logger.log(`Report written: ${reportResult.filePath} (elapsed ${elapsed})`);
     return 0;
   } catch (error) {
     const err = error as NodeJS.ErrnoException;
     const code = error instanceof ValidationError || err?.code === "ENOENT" ? 2 : 1;
+    progress.stop();
     logger.error(error instanceof Error ? error.message : String(error));
 
     try {
@@ -489,5 +512,7 @@ export async function runReviewCommand(options: RunReviewCommandOptions = {}): P
     }
 
     return code;
+  } finally {
+    progress.stop();
   }
 }

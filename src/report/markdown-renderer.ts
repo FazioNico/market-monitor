@@ -36,11 +36,19 @@ function wordCount(text: string): number {
 }
 
 function trimToWordLimit(text: string, limit: number): string {
-  const words = text.trim().split(/\s+/).filter(Boolean);
-  if (words.length <= limit) {
-    return text;
+  const matcher = /\S+/g;
+  let match: RegExpExecArray | null;
+  let count = 0;
+
+  while ((match = matcher.exec(text)) !== null) {
+    count += 1;
+    if (count >= limit) {
+      const endIndex = match.index + match[0].length;
+      return `${text.slice(0, endIndex)} …`;
+    }
   }
-  return `${words.slice(0, limit).join(" ")} …`;
+
+  return text;
 }
 
 function findOmissionReason(omissionReasons: string[] | undefined, keyword: string): string {

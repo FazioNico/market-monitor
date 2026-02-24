@@ -41,17 +41,66 @@ function sanitizeNarrative(input: string | undefined): string | undefined {
     .trim();
 }
 
+function getField<T = unknown>(data: Record<string, unknown>, keys: string[]): T | undefined {
+  for (const key of keys) {
+    if (key in data) {
+      return data[key] as T;
+    }
+  }
+  return undefined;
+}
+
+function unwrapSentimentPayload(raw: unknown): Record<string, unknown> {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    return {};
+  }
+
+  const root = raw as Record<string, unknown>;
+  const nested = getField<Record<string, unknown>>(root, [
+    "sentimentAssessment",
+    "sentiment_assessment",
+    "sentiment",
+    "output",
+    "result",
+  ]);
+
+  if (nested && typeof nested === "object" && !Array.isArray(nested)) {
+    return nested;
+  }
+
+  return root;
+}
+
+function parseScore(value: unknown): number {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return clamp(Number(value.toFixed(2)), -2, 2);
+  }
+  if (typeof value === "string" && value.trim().length > 0) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) {
+      return clamp(Number(parsed.toFixed(2)), -2, 2);
+    }
+  }
+  return 0;
+}
+
 function normalizeLlmSentimentOutput(raw: unknown): SentimentAssessment {
-  const data = raw as Partial<SentimentAssessment> & Record<string, unknown>;
-  const scoreValue = typeof data.score === "number" ? clamp(Number(data.score.toFixed(2)), -2, 2) : 0;
+  const data = unwrapSentimentPayload(raw);
+  const scoreValue = parseScore(getField(data, ["score", "sentimentScore", "sentiment_score"]));
+  const narrativeValue = getField<string>(data, ["narrativeSummary", "narrative_summary", "summary"]);
+  const coherenceValue = getField<string>(data, [
+    "priceActionCoherence",
+    "price_action_coherence",
+    "coherence",
+  ]);
   const coherence =
-    typeof data.priceActionCoherence === "string" && data.priceActionCoherence.trim().length > 0
-      ? sanitizeNarrative(data.priceActionCoherence) ?? "Coherence assessment unavailable."
+    typeof coherenceValue === "string" && coherenceValue.trim().length > 0
+      ? sanitizeNarrative(coherenceValue) ?? "Coherence assessment unavailable."
       : "Coherence assessment unavailable.";
   return {
     score: scoreValue,
     method: "llm_assisted",
-    narrativeSummary: sanitizeNarrative(typeof data.narrativeSummary === "string" ? data.narrativeSummary : undefined),
+    narrativeSummary: sanitizeNarrative(typeof narrativeValue === "string" ? narrativeValue : undefined),
     priceActionCoherence: coherence,
     status: "complete",
   };

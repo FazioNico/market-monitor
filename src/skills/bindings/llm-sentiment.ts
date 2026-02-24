@@ -1,4 +1,4 @@
-import type { NewsItem, MarketSnapshotItem, RegimeAssessment, SentimentAssessment } from "../../shared/types";
+import type { NewsItem, MarketSnapshotItem, RegimeAssessment } from "../../shared/types";
 
 export interface LlmSentimentBindingDependencies {
   invoke?: (prompt: { skillDescription: string; context: unknown }) => Promise<unknown>;
@@ -12,12 +12,31 @@ export async function llmSentimentBinding(
     regime: RegimeAssessment;
   },
   deps: LlmSentimentBindingDependencies = {},
-): Promise<SentimentAssessment> {
+): Promise<unknown> {
   if (!deps.invoke) {
     throw new Error("LLM invoke not configured");
   }
   const raw = await deps.invoke({
-    skillDescription: input.skillDescription,
+    skillDescription: [
+      input.skillDescription,
+      "",
+      "Output contract (strict): return a top-level JSON object only, with these keys:",
+      '- "score": number in [-2, 2]',
+      '- "narrative_summary" (or "narrativeSummary"): string',
+      '- "price_action_coherence" (or "priceActionCoherence"): string',
+      "No wrapper object. No markdown. No prose outside JSON.",
+      "",
+      "Example:",
+      JSON.stringify(
+        {
+          score: 0.6,
+          narrative_summary: "Measured sentiment is moderately constructive with mixed but improving evidence.",
+          price_action_coherence: "Headline tone broadly aligns with recent price stabilization and follow-through.",
+        },
+        null,
+        2,
+      ),
+    ].join("\n"),
     context: {
       newsItems: input.newsItems.slice(0, 8),
       marketSnapshot: input.marketSnapshot,
@@ -25,18 +44,6 @@ export async function llmSentimentBinding(
     },
   });
   const parsed = typeof raw === "string" ? (JSON.parse(raw) as any) : (raw as any);
-
-  return {
-    score: typeof parsed.score === "number" ? parsed.score : 0,
-    method: "llm_assisted",
-    narrativeSummary:
-      typeof parsed.narrativeSummary === "string"
-        ? parsed.narrativeSummary
-        : "LLM-assisted sentiment summary unavailable.",
-    priceActionCoherence:
-      typeof parsed.priceActionCoherence === "string"
-        ? parsed.priceActionCoherence
-        : "Coherence assessment unavailable.",
-    status: "complete",
-  };
+  // Return raw payload so the sentiment service can apply tolerant parsing and validation.
+  return parsed;
 }

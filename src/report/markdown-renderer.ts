@@ -1,6 +1,7 @@
 import type {
   MacroSeriesObservation,
   MarketSnapshotItem,
+  NewsReadingPriorityList,
   NewsItem,
   OutlookDistribution,
   PositionWordingBlock,
@@ -21,6 +22,7 @@ export interface RenderReportInput {
   macroContext: MacroSeriesObservation[];
   regime: RegimeAssessment;
   sentiment: SentimentAssessment;
+  topArticlesToRead?: NewsReadingPriorityList;
   outlook: OutlookDistribution;
   riskInvalidation: RiskInvalidationBlock;
   positionWording: PositionWordingBlock;
@@ -31,28 +33,16 @@ function formatPct(value: number): string {
   return `${value >= 0 ? "+" : ""}${value.toFixed(2)}%`;
 }
 
-function wordCount(text: string): number {
-  return text.trim().split(/\s+/).filter(Boolean).length;
-}
-
-function trimToWordLimit(text: string, limit: number): string {
-  const matcher = /\S+/g;
-  let match: RegExpExecArray | null;
-  let count = 0;
-
-  while ((match = matcher.exec(text)) !== null) {
-    count += 1;
-    if (count >= limit) {
-      const endIndex = match.index + match[0].length;
-      return `${text.slice(0, endIndex)} …`;
-    }
-  }
-
-  return text;
-}
-
 function findOmissionReason(omissionReasons: string[] | undefined, keyword: string): string {
   return omissionReasons?.find((reason) => reason.toLowerCase().includes(keyword)) ?? "LLM failure";
+}
+
+function escapeMarkdownTableCell(value: string): string {
+  return value.replace(/\|/g, "\\|").replace(/\r?\n/g, "<br>");
+}
+
+function buildMarkdownTableRow(cells: string[]): string {
+  return `| ${cells.map(escapeMarkdownTableCell).join(" | ")} |`;
 }
 
 function renderPositionWording(positionWording: PositionWordingBlock, omissionReasons?: string[]): string {
@@ -67,6 +57,85 @@ function renderPositionWording(positionWording: PositionWordingBlock, omissionRe
     `- No-trade zones: ${(positionWording.noTradeZones ?? []).join("; ")}`,
     `- Time horizon: ${positionWording.timeHorizon ?? "N/A"}`,
   ].join("\n");
+}
+
+function renderTopArticlesToReadSection(
+  topArticlesToRead: NewsReadingPriorityList | undefined,
+  fallbackNewsItems: NewsItem[],
+): string[] {
+  const lines: string[] = [];
+  lines.push("## Top 20 Articles to Read (Prioritized)");
+
+  if (!topArticlesToRead) {
+    lines.push("- Prioritization not available.");
+    return lines;
+  }
+
+  lines.push(`- Method: ${topArticlesToRead.method}`);
+  lines.push(
+    `- Universe evaluated: ${topArticlesToRead.totalNewsEvaluated} | Candidate pool: ${topArticlesToRead.candidateNewsEvaluated} | Selected: ${topArticlesToRead.items.length}`,
+  );
+
+  for (const note of topArticlesToRead.notes ?? []) {
+    lines.push(`- Note: ${note}`);
+  }
+
+  if (topArticlesToRead.items.length === 0) {
+    lines.push("- No prioritized articles available.");
+    if (fallbackNewsItems.length > 0) {
+      lines.push(`- Raw extracted articles remain available in the news section (${fallbackNewsItems.length} items).`);
+    }
+    return lines;
+  }
+
+  lines.push("");
+  lines.push(
+    buildMarkdownTableRow([
+      "Rank",
+      "Source",
+      "Date",
+      "Article",
+      "Relevance",
+      "Sentiment",
+      "Market",
+      "Behavior",
+      "Horizon",
+      "Why Read",
+    ]),
+  );
+  lines.push(
+    buildMarkdownTableRow([
+      "---",
+      "---",
+      "---",
+      "---",
+      "---",
+      "---",
+      "---",
+      "---",
+      "---",
+      "---",
+    ]),
+  );
+
+  for (const item of topArticlesToRead.items) {
+    lines.push(
+      buildMarkdownTableRow([
+        String(item.rank),
+        item.source,
+        item.publishedAt.slice(0, 10),
+        `[${item.title}](<${item.link}>)`,
+        `${item.relevanceScore.toFixed(1)}/10`,
+        item.sentimentImpact,
+        item.marketImpact,
+        item.investorBehaviorImpact,
+        item.timeHorizon,
+        item.rationale,
+      ]),
+    );
+  }
+
+  return lines;
 }
 
 export function renderMarketReportMarkdown(input: RenderReportInput): string {
@@ -84,14 +153,7 @@ export function renderMarketReportMarkdown(input: RenderReportInput): string {
   }
   lines.push("");
 
-  lines.push("## News Summary / RSS Ingestion Summary");
-  lines.push(`- Articles after deduplication: ${input.newsItems.length}`);
-  for (const item of input.newsItems.slice(0, 50)) {
-    lines.push(`- [${item.source}] ${item.title} (${item.publishedAt.slice(0, 10)}) [🔗](${item.link})`);
-  }
-  if (input.newsItems.length === 0) {
-    lines.push("- No recent articles in the configured lookback window.");
-  }
+  lines.push(...renderTopArticlesToReadSection(input.topArticlesToRead, input.newsItems));
   lines.push("");
 
   lines.push("## Market Snapshot");
@@ -157,10 +219,18 @@ export function renderMarketReportMarkdown(input: RenderReportInput): string {
   for (const line of input.diagnostics ?? []) {
     lines.push(`- ${line}`);
   }
+  lines.push("");
 
-  let report = lines.join("\n").replace(/\n{3,}/g, "\n\n");
-  if (input.status === "complete" && wordCount(report) > 1200) {
-    report = trimToWordLimit(report, 1200);
+  lines.push("## News Summary / RSS Ingestion Summary");
+  lines.push(`> Sources: ${input.newsItems.length} articles from ${[...new Set(input.newsItems.map((item) => item.source))].join(", ")}`);
+  for (const item of input.newsItems) {
+    lines.push(`- [${item.source}] ${item.title} (${item.publishedAt.slice(0, 10)}) [🔗](${item.link})`);
   }
+  if (input.newsItems.length === 0) {
+    lines.push("- No recent articles in the configured lookback window.");
+  }
+  lines.push("");
+
+  const report = lines.join("\n").replace(/\n{3,}/g, "\n\n");
   return `${report}\n`;
 }

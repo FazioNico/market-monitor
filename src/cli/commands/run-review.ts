@@ -28,6 +28,7 @@ import {
   generateSentimentAssessment,
   type SentimentServiceOptions,
 } from "../../analysis/sentiment-service";
+import { buildNewsReadingPriorityList } from "../../analysis/news-reading-priority";
 import { buildOutlookDistribution } from "../../analysis/outlook-service";
 import { buildRiskInvalidation } from "../../analysis/risk-invalidation";
 import {
@@ -242,6 +243,7 @@ export async function runReviewCommand(options: RunReviewCommandOptions = {}): P
     let reportStatus: "complete" | "incomplete" = "complete";
     const omissionReasons: string[] = [];
     let sentimentLlmError: string | undefined;
+    let topArticlesLlmError: string | undefined;
     let positionLlmError: string | undefined;
 
     const sentiment = await generateSentimentAssessment(
@@ -270,6 +272,23 @@ export async function runReviewCommand(options: RunReviewCommandOptions = {}): P
         : "LLM sentiment failure";
       omissionReasons.push(reason);
       logger.error(reason);
+    }
+    const topArticlesToRead = await buildNewsReadingPriorityList(
+      { newsItems, marketSnapshot, regime, sentiment },
+      {
+        llmInvoke,
+        now: baseDate,
+        // Large news universes (700+) can exceed LLM latency budgets if the candidate pool is too wide.
+        // Keep a strong prefilter while limiting total token load for the ranking pass.
+        prefilterLimit: 120,
+        chunkSize: 80,
+        onLlmError: (error) => {
+          topArticlesLlmError = describeLlmError(error);
+        },
+      },
+    );
+    if (topArticlesLlmError) {
+      logger.error(`LLM top article ranking failure: ${topArticlesLlmError}`);
     }
     let outlook = buildOutlookDistribution({ regime, sentiment });
     if (outlookValidationSkill) {
@@ -328,6 +347,7 @@ export async function runReviewCommand(options: RunReviewCommandOptions = {}): P
       macroContext,
       regime,
       sentiment,
+      topArticlesToRead,
       outlook,
       riskInvalidation,
       positionWording,
@@ -335,6 +355,10 @@ export async function runReviewCommand(options: RunReviewCommandOptions = {}): P
         `Feeds processed: ${feedCatalog.entries.length}`,
         `Watchlist enabled: ${watchlist.instruments.length}`,
         `Skills enabled: ${enabledSkills.length}`,
+        `Top article picks method: ${topArticlesToRead.method}`,
+        `Top article picks selected: ${topArticlesToRead.items.length}`,
+        `Top article candidate pool: ${topArticlesToRead.candidateNewsEvaluated}/${topArticlesToRead.totalNewsEvaluated}`,
+        ...(topArticlesLlmError ? [`Top article ranking LLM error: ${topArticlesLlmError}`] : []),
       ],
     });
     if (reportFormatSkill) {
@@ -374,6 +398,7 @@ export async function runReviewCommand(options: RunReviewCommandOptions = {}): P
         `macro_context=${macroContext.length}`,
         ...(omissionReasons.length > 0 ? [`omissions=${omissionReasons.join("|")}`] : []),
         ...(sentimentLlmError ? [`llm_sentiment_error=${sentimentLlmError}`] : []),
+        ...(topArticlesLlmError ? [`llm_top_articles_error=${topArticlesLlmError}`] : []),
         ...(positionLlmError ? [`llm_position_error=${positionLlmError}`] : []),
       ],
     });

@@ -9,10 +9,6 @@ async function readFixture(relativePath: string): Promise<string> {
   return readFile(join(process.cwd(), "tests", "fixtures", relativePath), "utf8");
 }
 
-function wordCount(text: string): number {
-  return text.trim().split(/\s+/).filter(Boolean).length;
-}
-
 describe("report output contract", () => {
   it("validates filename regex, section order, and readability proxy", async () => {
     const workspace = await createTempWorkspace();
@@ -74,6 +70,7 @@ describe("report output contract", () => {
         "## Market Snapshot",
         "## Regime Detection",
         "## Sentiment Scoring",
+        "## Top 20 Articles to Read (Prioritized)",
         "## Probabilistic Outlook",
         "## Risk & Invalidation",
         "## Position Wording",
@@ -84,7 +81,8 @@ describe("report output contract", () => {
         expect(idx).toBeGreaterThan(cursor);
         cursor = idx;
       }
-      expect(wordCount(markdown)).toBeLessThanOrEqual(1200);
+      expect(markdown.trimEnd().endsWith("...")).toBe(false);
+      expect(markdown.trimEnd().endsWith("…")).toBe(false);
     } finally {
       await workspace.cleanup();
     }

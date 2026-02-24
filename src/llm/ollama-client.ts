@@ -13,6 +13,8 @@ export interface OllamaInvokeOptions {
   timeoutMs?: number;
 }
 
+const DEFAULT_OLLAMA_TIMEOUT_MS = 90_000;
+
 function trimTrailingSlash(value: string): string {
   return value.endsWith("/") ? value.slice(0, -1) : value;
 }
@@ -79,7 +81,7 @@ export function createOllamaInvoke(options: OllamaInvokeOptions) {
 
   return async (prompt: LlmInvokePrompt): Promise<unknown> => {
     const controller = new AbortController();
-    const timeoutMs = options.timeoutMs ?? 30_000;
+    const timeoutMs = options.timeoutMs ?? DEFAULT_OLLAMA_TIMEOUT_MS;
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
     try {

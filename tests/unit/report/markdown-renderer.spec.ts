@@ -28,6 +28,28 @@ describe("markdown renderer", () => {
         priceActionCoherence: "p",
         status: "complete",
       },
+      topArticlesToRead: {
+        method: "llm_chunked",
+        totalNewsEvaluated: 742,
+        candidateNewsEvaluated: 200,
+        items: [
+          {
+            rank: 1,
+            title: "ETF flow regime shifts as BTC volatility compresses",
+            source: "Example",
+            publishedAt: "2026-02-23T07:00:00.000Z",
+            link: "https://example.com/top-article",
+            category: "crypto",
+            relevanceScore: 8.9,
+            sentimentImpact: "high",
+            marketImpact: "high",
+            investorBehaviorImpact: "high",
+            timeHorizon: "intraday to 2 days",
+            rationale: "Flow and positioning implications can quickly alter sentiment and near-term price behavior.",
+          },
+        ],
+        notes: ["LLM evaluated a prefiltered candidate pool (200) from 742 extracted articles."],
+      },
       outlook: {
         bullPct: 30,
         basePct: 40,
@@ -57,6 +79,7 @@ describe("markdown renderer", () => {
       "## Market Snapshot",
       "## Regime Detection",
       "## Sentiment Scoring",
+      "## Top 20 Articles to Read (Prioritized)",
       "## Probabilistic Outlook",
       "## Risk & Invalidation",
       "## Position Wording",
@@ -74,6 +97,9 @@ describe("markdown renderer", () => {
     expect(markdown).toContain("report status: complete");
     expect(markdown).toContain("trigger type: manual");
     expect(markdown).toContain("data source summary: RSS, CoinGecko, FRED");
+    expect(markdown).toContain("Method: llm_chunked");
+    expect(markdown).toContain("| Rank | Source | Date | Article | Relevance | Sentiment | Market | Behavior | Horizon | Why Read |");
+    expect(markdown).toContain("| 1 | Example | 2026-02-23 | [ETF flow regime shifts as BTC volatility compresses](<https://example.com/top-article>) | 8.9/10 | high | high | high | intraday to 2 days |");
   });
 
   it("renders incomplete metadata and omission reasons", () => {
@@ -123,7 +149,7 @@ describe("markdown renderer", () => {
     expect(markdown).toContain("Section omitted");
   });
 
-  it("preserves markdown line breaks when truncating long complete reports", () => {
+  it("renders long complete reports without truncating them", () => {
     const longText = Array.from({ length: 1400 }, (_, i) => `word${i}`).join(" ");
     const markdown = renderMarketReportMarkdown({
       generatedAt: "2026-02-23T08:15:00.000Z",
@@ -175,5 +201,7 @@ describe("markdown renderer", () => {
     expect(markdown).toContain("\n## Report Metadata\n");
     expect(markdown).toContain("\n## News Summary / RSS Ingestion Summary\n");
     expect(markdown.split("\n").length).toBeGreaterThan(5);
+    expect(markdown).toContain(longText);
+    expect(markdown.trimEnd().endsWith("…")).toBe(false);
   });
 });

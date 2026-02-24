@@ -131,6 +131,33 @@ export interface SentimentAssessment {
   status: "complete" | "omitted_llm_failure";
 }
 
+export type NewsReadingPriorityMethod = "llm_single_pass" | "llm_chunked" | "deterministic";
+
+export type NewsImpactLevel = "high" | "medium" | "low";
+
+export interface PrioritizedNewsItem {
+  rank: number;
+  title: string;
+  source: string;
+  publishedAt: string;
+  link: string;
+  category: string;
+  relevanceScore: number;
+  sentimentImpact: NewsImpactLevel;
+  marketImpact: NewsImpactLevel;
+  investorBehaviorImpact: NewsImpactLevel;
+  timeHorizon: string;
+  rationale: string;
+}
+
+export interface NewsReadingPriorityList {
+  method: NewsReadingPriorityMethod;
+  totalNewsEvaluated: number;
+  candidateNewsEvaluated: number;
+  items: PrioritizedNewsItem[];
+  notes?: string[];
+}
+
 export interface OutlookDistribution {
   bullPct: number;
   basePct: number;

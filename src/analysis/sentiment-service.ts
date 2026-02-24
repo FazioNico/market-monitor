@@ -28,6 +28,7 @@ export interface SentimentServiceOptions {
       regime: RegimeAssessment;
     }): Promise<unknown>;
   };
+  onLlmError?: (error: unknown) => void;
 }
 
 function sanitizeNarrative(input: string | undefined): string | undefined {
@@ -68,7 +69,8 @@ export async function generateSentimentAssessment(
     try {
       const raw = await options.skillExecution.execute(context);
       return normalizeLlmSentimentOutput(raw);
-    } catch {
+    } catch (error) {
+      options.onLlmError?.(error);
       return {
         method: "llm_assisted",
         priceActionCoherence: "LLM skill binding failed before coherence assessment",
@@ -81,6 +83,7 @@ export async function generateSentimentAssessment(
     try {
       return normalizeLlmSentimentOutput(await options.llmBinding(context));
     } catch (error) {
+      options.onLlmError?.(error);
       return {
         method: "llm_assisted",
         priceActionCoherence: "LLM binding failed before coherence assessment",

@@ -36,6 +36,7 @@ import {
 } from "../../analysis/position-wording";
 import { createBindingRegistry } from "../../skills/binding-registry";
 import { loadSkillsFromDirectory } from "../../skills/skill-loader";
+import { createOllamaInvoke } from "../../llm/ollama-client";
 
 type Logger = Pick<typeof console, "log" | "error">;
 
@@ -84,6 +85,13 @@ function dateFromOverride(dateOverride: string | undefined): Date | undefined {
 
 function flatten<T>(input: T[][]): T[] {
   return input.flatMap((items) => items);
+}
+
+function describeLlmError(error: unknown): string {
+  if (error instanceof Error) {
+    return `${error.name ? `${error.name}: ` : ""}${error.message}`.trim().slice(0, 800);
+  }
+  return String(error).slice(0, 800);
 }
 
 export interface RunReviewCommandOptions {
@@ -135,7 +143,18 @@ export async function runReviewCommand(options: RunReviewCommandOptions = {}): P
     const generatedAt = baseDate.toISOString();
     const feedCatalog = await readFeedCatalogFile(context.paths.rssFeedsPath);
     const watchlist = await readWatchlistFile(context.paths.watchlistPath);
-    const bindingRegistry = createBindingRegistry({ llm: { invoke: options.llmInvoke } });
+    const llmInvoke =
+      options.llmInvoke ??
+      (context.env.llmBaseUrl && context.env.llmModel
+        ? createOllamaInvoke({
+            baseUrl: context.env.llmBaseUrl,
+            model: context.env.llmModel,
+            apiKey: context.env.llmApiKey,
+            fetchFn: options.fetchFn,
+          })
+        : undefined);
+
+    const bindingRegistry = createBindingRegistry({ llm: { invoke: llmInvoke } });
     const loadedSkills = await loadSkillsFromDirectory({
       skillsRootDir: context.paths.skillsDir,
       allowedBindingTypes: bindingRegistry.supportedBindingTypes,
@@ -222,6 +241,8 @@ export async function runReviewCommand(options: RunReviewCommandOptions = {}): P
     const regime = detectRegime({ marketSnapshot, macroContext });
     let reportStatus: "complete" | "incomplete" = "complete";
     const omissionReasons: string[] = [];
+    let sentimentLlmError: string | undefined;
+    let positionLlmError: string | undefined;
 
     const sentiment = await generateSentimentAssessment(
       { newsItems, marketSnapshot, regime },
@@ -231,12 +252,24 @@ export async function runReviewCommand(options: RunReviewCommandOptions = {}): P
               skill: sentimentSkill,
               execute: (payload) => bindingRegistry.execute(sentimentSkill, payload),
             },
+            onLlmError: (error) => {
+              sentimentLlmError = describeLlmError(error);
+            },
           }
-        : { llmBinding: options.llmBindings?.sentiment },
+        : {
+            llmBinding: options.llmBindings?.sentiment,
+            onLlmError: (error) => {
+              sentimentLlmError = describeLlmError(error);
+            },
+          },
     );
     if (sentiment.status !== "complete") {
       reportStatus = "incomplete";
-      omissionReasons.push("LLM sentiment failure");
+      const reason = sentimentLlmError
+        ? `LLM sentiment failure: ${sentimentLlmError}`
+        : "LLM sentiment failure";
+      omissionReasons.push(reason);
+      logger.error(reason);
     }
     let outlook = buildOutlookDistribution({ regime, sentiment });
     if (outlookValidationSkill) {
@@ -255,12 +288,24 @@ export async function runReviewCommand(options: RunReviewCommandOptions = {}): P
               skill: positioningSkill,
               execute: (payload) => bindingRegistry.execute(positioningSkill, payload),
             },
+            onLlmError: (error) => {
+              positionLlmError = describeLlmError(error);
+            },
           }
-        : { llmBinding: options.llmBindings?.positionWording },
+        : {
+            llmBinding: options.llmBindings?.positionWording,
+            onLlmError: (error) => {
+              positionLlmError = describeLlmError(error);
+            },
+          },
     );
     if (positionWording.status !== "complete") {
       reportStatus = "incomplete";
-      omissionReasons.push("LLM position wording failure");
+      const reason = positionLlmError
+        ? `LLM position wording failure: ${positionLlmError}`
+        : "LLM position wording failure";
+      omissionReasons.push(reason);
+      logger.error(reason);
     }
 
     const metadata = createReportMetadata({
@@ -319,7 +364,7 @@ export async function runReviewCommand(options: RunReviewCommandOptions = {}): P
       llmStatus:
         reportStatus === "incomplete"
           ? "error"
-          : options.llmBindings
+          : llmInvoke
             ? "success"
             : "not_used",
       messages: [
@@ -328,6 +373,8 @@ export async function runReviewCommand(options: RunReviewCommandOptions = {}): P
         `market_snapshot=${marketSnapshot.length}`,
         `macro_context=${macroContext.length}`,
         ...(omissionReasons.length > 0 ? [`omissions=${omissionReasons.join("|")}`] : []),
+        ...(sentimentLlmError ? [`llm_sentiment_error=${sentimentLlmError}`] : []),
+        ...(positionLlmError ? [`llm_position_error=${positionLlmError}`] : []),
       ],
     });
 

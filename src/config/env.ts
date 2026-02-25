@@ -32,6 +32,7 @@ export function parseEnv(env: RawEnv = process.env): AppEnv {
     runLogPath,
     fredApiKey: normalizeOptionalString(env.FRED_API_KEY),
     coingeckoApiKey: normalizeOptionalString(env.COINGECKO_API_KEY),
+    hyperliquidDex: normalizeOptionalString(env.HYPERLIQUID_DEX),
     llmApiKey: normalizeOptionalString(env.LLM_API_KEY),
     llmBaseUrl: normalizeOptionalString(env.LLM_BASE_URL),
     llmModel: normalizeOptionalString(env.LLM_MODEL),

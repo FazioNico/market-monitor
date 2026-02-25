@@ -22,6 +22,7 @@ import { parseRssEntries } from "../../ingest/rss-parse";
 import { createCoinGeckoClient } from "../../market/coingecko-client";
 import { createFarsideEtfClient } from "../../market/farside-etf-client";
 import { createFredClient } from "../../market/fred-client";
+import { createHyperliquidClient } from "../../market/hyperliquid-client";
 import { createProviderRegistry } from "../../market/provider-registry";
 import { fetchMacroSeriesContext } from "../../market/macro-series-service";
 import { buildMarketSnapshot } from "../../market/snapshot-service";
@@ -245,6 +246,9 @@ export async function runReviewCommand(options: RunReviewCommandOptions = {}): P
         fetchFn: options.fetchFn,
         apiKey: context.env.fredApiKey,
       }),
+      hyperliquid: createHyperliquidClient({
+        dex: context.env.hyperliquidDex ?? "xyz",
+      }),
     });
 
     const farsideEtfClient = createFarsideEtfClient({
@@ -268,6 +272,7 @@ export async function runReviewCommand(options: RunReviewCommandOptions = {}): P
     }
 
     const regime = detectRegime({ marketSnapshot, macroContext });
+    const marketProviders = new Set(marketSnapshot.map((item) => item.provider.toLowerCase()));
     let reportStatus: "complete" | "incomplete" = "complete";
     const omissionReasons: string[] = [];
     let sentimentLlmError: string | undefined;
@@ -394,7 +399,13 @@ export async function runReviewCommand(options: RunReviewCommandOptions = {}): P
       triggerType: parsedArgs.triggerType,
       generatedAt,
       status: reportStatus,
-      dataSources: ["RSS", "CoinGecko", "FRED", ...(etfFlows ? ["Farside"] : [])],
+      dataSources: [
+        "RSS",
+        "CoinGecko",
+        ...(marketProviders.has("hyperliquid") ? ["Hyperliquid"] : []),
+        "FRED",
+        ...(etfFlows ? ["Farside"] : []),
+      ],
       omissionReasons,
     });
 

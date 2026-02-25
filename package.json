@@ -21,6 +21,7 @@
     "vitest": "latest"
   },
   "dependencies": {
+    "@nktkas/hyperliquid": "^0.31.0",
     "better-sqlite3": "^12.6.2",
     "dotenv": "^17.3.1",
     "fast-xml-parser": "latest",

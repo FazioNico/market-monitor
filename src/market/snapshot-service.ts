@@ -3,7 +3,12 @@ import type { ProviderRegistry } from "./provider-registry";
 
 export async function buildMarketSnapshot(
   watchlist: WatchlistInstrument[],
-  providers: Pick<ProviderRegistry, "coingecko">,
+  providers: Pick<ProviderRegistry, "coingecko" | "hyperliquid">,
 ): Promise<MarketSnapshotItem[]> {
-  return providers.coingecko.fetchMarketSnapshots(watchlist);
+  const [coingeckoSnapshots, hyperliquidSnapshots] = await Promise.all([
+    providers.coingecko.fetchMarketSnapshots(watchlist),
+    providers.hyperliquid.fetchMarketSnapshots(watchlist),
+  ]);
+
+  return [...coingeckoSnapshots, ...hyperliquidSnapshots];
 }

@@ -40,6 +40,22 @@ function formatUsdMillions(value: number): string {
   return `${value >= 0 ? "+" : "-"}$${Math.abs(value).toFixed(1)}m`;
 }
 
+const MACRO_COMMODITY_INSTRUMENT_IDS = new Set(["gold-usdc", "silver-usdc", "copper-usdc", "oil-usdc", "cl-usdc"]);
+
+function isMacroCommoditySnapshot(item: MarketSnapshotItem): boolean {
+  const provider = item.provider.toLowerCase();
+  if (!provider.includes("hyperliquid")) {
+    return false;
+  }
+
+  const instrumentId = item.instrumentId.toLowerCase();
+  if (MACRO_COMMODITY_INSTRUMENT_IDS.has(instrumentId)) {
+    return true;
+  }
+
+  return /(gold|silver|copper)/.test(instrumentId) || /(^|[-_/])(cl|oil)([-_/]|$)/.test(instrumentId);
+}
+
 function getRowTotalNetFlowUsdM(row: EtfFlowDataset["rows"][number]): number | null {
   if (row.totalNetFlowUsdM !== null) {
     return row.totalNetFlowUsdM;
@@ -374,32 +390,72 @@ function renderTacticalOutlookSection(input: RenderReportInput): string[] {
 function renderMacroDashboardSection(input: RenderReportInput): string[] {
   const lines: string[] = [];
   const macroObservations = collectMacroObservations(input);
+  const macroCommodityItems = input.marketSnapshot.filter(isMacroCommoditySnapshot);
 
   lines.push("## 5. Macro Dashboard");
 
-  if (macroObservations.length === 0) {
+  if (macroObservations.length === 0 && macroCommodityItems.length === 0) {
     lines.push("- No macro dashboard data available.");
     return lines;
   }
 
-  lines.push(
-    `- Snapshot summary: ${macroObservations.map((obs) => `${obs.label}=${obs.value} (${obs.observedAt})`).join("; ")}`,
-  );
-  lines.push("");
-  lines.push(buildMarkdownTableRow(["Series", "Label", "Value", "Units", "Observed At", "Provider"]));
-  lines.push(buildMarkdownTableRow(["---", "---", "---", "---", "---", "---"]));
+  if (macroObservations.length > 0) {
+    lines.push(
+      `- Snapshot summary: ${macroObservations.map((obs) => `${obs.label}=${obs.value} (${obs.observedAt})`).join("; ")}`,
+    );
+    lines.push("");
+    lines.push(buildMarkdownTableRow(["Series", "Label", "Value", "Units", "Observed At", "Provider"]));
+    lines.push(buildMarkdownTableRow(["---", "---", "---", "---", "---", "---"]));
 
-  for (const observation of macroObservations) {
+    for (const observation of macroObservations) {
+      lines.push(
+        buildMarkdownTableRow([
+          observation.seriesId,
+          observation.label,
+          String(observation.value),
+          observation.units ?? "N/A",
+          observation.observedAt,
+          observation.provider,
+        ]),
+      );
+    }
+  } else {
+    lines.push("- No macro series observations available.");
+  }
+
+  if (macroCommodityItems.length > 0) {
+    lines.push("");
+    lines.push("### Macro Commodities (Hyperliquid)");
+    lines.push(`- Instruments tracked: ${macroCommodityItems.length}`);
+    lines.push("");
     lines.push(
       buildMarkdownTableRow([
-        observation.seriesId,
-        observation.label,
-        String(observation.value),
-        observation.units ?? "N/A",
-        observation.observedAt,
-        observation.provider,
+        "Instrument",
+        "Price",
+        "Currency",
+        "24h",
+        "7d",
+        "Volume 24h",
+        "Provider",
+        "Captured At",
       ]),
     );
+    lines.push(buildMarkdownTableRow(["---", "---", "---", "---", "---", "---", "---", "---"]));
+
+    for (const item of macroCommodityItems) {
+      lines.push(
+        buildMarkdownTableRow([
+          item.instrumentId,
+          item.currentPrice.toFixed(2),
+          item.currency.toUpperCase(),
+          formatPct(item.return24hPct),
+          formatPct(item.return7dPct),
+          item.volume24h === undefined ? "N/A" : String(Math.round(item.volume24h)),
+          item.provider,
+          item.capturedAt,
+        ]),
+      );
+    }
   }
 
   return lines;
@@ -407,8 +463,18 @@ function renderMacroDashboardSection(input: RenderReportInput): string[] {
 
 function renderCryptoDashboardSection(marketSnapshot: MarketSnapshotItem[]): string[] {
   const lines: string[] = [];
-  const cryptoItems = marketSnapshot.filter((item) => item.provider.toLowerCase().includes("coingecko"));
-  const itemsToRender = cryptoItems.length > 0 ? cryptoItems : marketSnapshot;
+  const providerMatchedItems = marketSnapshot.filter((item) => {
+    const provider = item.provider.toLowerCase();
+    return provider.includes("coingecko") || provider.includes("hyperliquid");
+  });
+  const explicitCryptoItems = providerMatchedItems.filter((item) => !isMacroCommoditySnapshot(item));
+  const fallbackItems = marketSnapshot.filter((item) => !isMacroCommoditySnapshot(item));
+  const itemsToRender =
+    explicitCryptoItems.length > 0
+      ? explicitCryptoItems
+      : providerMatchedItems.length === 0
+        ? fallbackItems
+        : [];
 
   lines.push("## 6. Crypto Dashboard");
 
@@ -417,7 +483,7 @@ function renderCryptoDashboardSection(marketSnapshot: MarketSnapshotItem[]): str
     return lines;
   }
 
-  if (cryptoItems.length === 0 && marketSnapshot.length > 0) {
+  if (providerMatchedItems.length === 0 && fallbackItems.length > 0) {
     lines.push("- No explicit crypto provider match found; rendering available market snapshot items.");
   }
 

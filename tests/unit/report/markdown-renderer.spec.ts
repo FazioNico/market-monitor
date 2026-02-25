@@ -106,7 +106,7 @@ describe("markdown renderer", () => {
     expect(markdown).toContain("---");
     expect(markdown).toContain("[ETF flow regime shifts as BTC volatility compresses](<https://example.com/top-article>)");
     expect(markdown).toContain(
-      "[Relevance: 8.9/10 | Sentiment: high | Market: high | Horizon: intraday to 2 days]",
+      "Relevance: 8.9/10 | Sentiment: high | Market: high | Horizon: intraday to 2 days",
     );
     expect(markdown).toContain("Behavior: high");
     expect(markdown).toContain("Source: Example");
@@ -222,5 +222,122 @@ describe("markdown renderer", () => {
     expect(markdown.split("\n").length).toBeGreaterThan(5);
     expect(markdown).toContain(longText);
     expect(markdown.trimEnd().endsWith("…")).toBe(false);
+  });
+
+  it("renders Hyperliquid macro commodities under Macro Dashboard and excludes them from Crypto Dashboard", () => {
+    const markdown = renderMarketReportMarkdown({
+      generatedAt: "2026-02-25T10:00:00.000Z",
+      status: "complete",
+      triggerType: "manual",
+      dataSources: ["RSS", "CoinGecko", "FRED", "Hyperliquid"],
+      newsItems: [],
+      marketSnapshot: [
+        {
+          instrumentId: "btc-usd",
+          capturedAt: "2026-02-25T10:00:00.000Z",
+          currentPrice: 100000,
+          return24hPct: 1.2,
+          return7dPct: 4.5,
+          volume24h: 123456789,
+          currency: "usd",
+          provider: "coingecko",
+        },
+        {
+          instrumentId: "gold-usdc",
+          capturedAt: "2026-02-25T10:00:00.000Z",
+          currentPrice: 2900,
+          return24hPct: 0.4,
+          return7dPct: 0,
+          volume24h: 111111,
+          currency: "usdc",
+          provider: "hyperliquid",
+        },
+        {
+          instrumentId: "silver-usdc",
+          capturedAt: "2026-02-25T10:00:00.000Z",
+          currentPrice: 32,
+          return24hPct: 0.7,
+          return7dPct: 0,
+          volume24h: 222222,
+          currency: "usdc",
+          provider: "hyperliquid",
+        },
+        {
+          instrumentId: "copper-usdc",
+          capturedAt: "2026-02-25T10:00:00.000Z",
+          currentPrice: 4.25,
+          return24hPct: -0.2,
+          return7dPct: 0,
+          volume24h: 333333,
+          currency: "usdc",
+          provider: "hyperliquid",
+        },
+        {
+          instrumentId: "oil-usdc",
+          capturedAt: "2026-02-25T10:00:00.000Z",
+          currentPrice: 73.5,
+          return24hPct: 0.9,
+          return7dPct: 0,
+          volume24h: 444444,
+          currency: "usdc",
+          provider: "hyperliquid",
+        },
+      ],
+      macroContext: [],
+      regime: {
+        label: "transition",
+        dispersionSignal: "d",
+        correlationSignal: "c",
+        momentumSignal: "m",
+        macroSignal: "macro",
+        macroContext: [],
+        rationale: "r",
+      },
+      sentiment: {
+        score: 0,
+        method: "deterministic",
+        narrativeSummary: "n",
+        priceActionCoherence: "p",
+        status: "complete",
+      },
+      outlook: {
+        bullPct: 30,
+        basePct: 40,
+        bearPct: 30,
+        primaryScenario: "base",
+        justification: "j",
+        constraintValidated: true,
+      },
+      riskInvalidation: {
+        invalidationConditions: ["a"],
+        keyPriceThresholds: ["b"],
+        criticalMacroEvents: ["c"],
+      },
+      positionWording: {
+        currentBias: "Measured risk-on bias",
+        addExposureConditions: ["x"],
+        reduceExposureConditions: ["y"],
+        noTradeZones: ["z"],
+        timeHorizon: "1-3 days",
+        status: "complete",
+      },
+    });
+
+    const macroStart = markdown.indexOf("## 5. Macro Dashboard");
+    const cryptoStart = markdown.indexOf("## 6. Crypto Dashboard");
+    const flowStart = markdown.indexOf("## 7. Flow & ETF Data");
+    const macroSection = markdown.slice(macroStart, cryptoStart);
+    const cryptoSection = markdown.slice(cryptoStart, flowStart);
+
+    expect(macroSection).toContain("### Macro Commodities (Hyperliquid)");
+    expect(macroSection).toContain("gold-usdc");
+    expect(macroSection).toContain("silver-usdc");
+    expect(macroSection).toContain("copper-usdc");
+    expect(macroSection).toContain("oil-usdc");
+    expect(cryptoSection).toContain("btc-usd");
+    expect(cryptoSection).not.toContain("gold-usdc");
+    expect(cryptoSection).not.toContain("silver-usdc");
+    expect(cryptoSection).not.toContain("copper-usdc");
+    expect(cryptoSection).not.toContain("oil-usdc");
   });
 });

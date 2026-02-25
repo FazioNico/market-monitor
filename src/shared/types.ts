@@ -28,6 +28,7 @@ export interface AppEnv {
   runLogPath: string;
   fredApiKey?: string;
   coingeckoApiKey?: string;
+  hyperliquidDex?: string;
   llmApiKey?: string;
   llmBaseUrl?: string;
   llmModel?: string;

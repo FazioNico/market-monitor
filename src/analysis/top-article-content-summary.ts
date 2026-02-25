@@ -9,6 +9,13 @@ export interface TopArticleSummaryEnrichmentOptions {
   concurrency?: number;
   maxSummaryChars?: number;
   onLlmError?: (error: unknown) => void;
+  onItemProcessed?: (event: {
+    completed: number;
+    total: number;
+    index: number;
+    item: PrioritizedNewsItem;
+    stats: TopArticleSummaryEnrichmentStats;
+  }) => void | Promise<void>;
 }
 
 export interface TopArticleSummaryEnrichmentStats {
@@ -437,6 +444,7 @@ export async function enrichTopArticlesWithContentSummaries(
   const concurrency = clampInt(options.concurrency ?? DEFAULT_CONCURRENCY, 1, 8);
   const maxSummaryChars = clampInt(options.maxSummaryChars ?? DEFAULT_MAX_SUMMARY_CHARS, 120, 500);
   const rssSummaryLookup = buildRssSummaryLookup(input.newsItems);
+  let completed = 0;
 
   const enrichedItems = await mapWithConcurrency(items, concurrency, async (item) => {
     const rssFallback =
@@ -449,6 +457,8 @@ export async function enrichTopArticlesWithContentSummaries(
     } catch {
       stats.fetchErrors += 1;
     }
+
+    let enrichedItem: PrioritizedNewsItem;
 
     if (html) {
       try {
@@ -464,7 +474,16 @@ export async function enrichTopArticlesWithContentSummaries(
             });
             stats.fromArticleContent += 1;
             stats.llmSummaries += 1;
-            return withArticleSummary(item, articleSummary);
+            enrichedItem = withArticleSummary(item, articleSummary);
+            completed += 1;
+            await options.onItemProcessed?.({
+              completed,
+              total: items.length,
+              index: item.rank - 1,
+              item: enrichedItem,
+              stats: { ...stats },
+            });
+            return enrichedItem;
           } catch (error) {
             stats.llmErrors += 1;
             options.onLlmError?.(error);
@@ -477,10 +496,27 @@ export async function enrichTopArticlesWithContentSummaries(
 
     if (rssFallback) {
       stats.fromRssFallback += 1;
-      return withArticleSummary(item, truncateAtWordBoundary(rssFallback, maxSummaryChars));
+      enrichedItem = withArticleSummary(item, truncateAtWordBoundary(rssFallback, maxSummaryChars));
+      completed += 1;
+      await options.onItemProcessed?.({
+        completed,
+        total: items.length,
+        index: item.rank - 1,
+        item: enrichedItem,
+        stats: { ...stats },
+      });
+      return enrichedItem;
     }
 
     stats.unavailable += 1;
+    completed += 1;
+    await options.onItemProcessed?.({
+      completed,
+      total: items.length,
+      index: item.rank - 1,
+      item,
+      stats: { ...stats },
+    });
     return item;
   });
 

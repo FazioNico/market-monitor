@@ -1,47 +1,13 @@
-import { createAppContext } from "../../runtime/app-context";
-import { appendRunLogEntry, createStartedRunLogEntry } from "../../runtime/run-log";
-import { acquireRunLock, buildRunLockPath } from "../../runtime/run-lock";
 import { ValidationError } from "../../shared/errors";
+import type { TriggerType } from "../../shared/types";
 import type {
-  EtfFlowSnapshot,
-  MacroSeriesObservation,
-  MarketSnapshotItem,
-  NewsItem,
-  NormalizedNewsItem,
-  TriggerType,
-  WatchlistInstrument,
-} from "../../shared/types";
-import { createReportMetadata, createRunId } from "../../report/report-model";
-import { renderMarketReportMarkdown } from "../../report/markdown-renderer";
-import { writeMarketReportFile } from "../../report/report-writer";
-import { readFeedCatalogFile } from "../../config/feed-catalog";
-import { readWatchlistFile } from "../../config/watchlist";
-import { deduplicateNews } from "../../ingest/deduplicate-news";
-import { fetchRssFeeds } from "../../ingest/rss-fetch";
-import { parseRssEntries } from "../../ingest/rss-parse";
-import { createCoinGeckoClient } from "../../market/coingecko-client";
-import { createFarsideEtfClient } from "../../market/farside-etf-client";
-import { createFredClient } from "../../market/fred-client";
-import { createHyperliquidClient } from "../../market/hyperliquid-client";
-import { createProviderRegistry } from "../../market/provider-registry";
-import { fetchMacroSeriesContext } from "../../market/macro-series-service";
-import { buildMarketSnapshot } from "../../market/snapshot-service";
-import { detectRegime } from "../../analysis/regime-detector";
+  RunReviewServiceOptions,
+} from "../../runtime/run-review-service";
 import {
-  generateSentimentAssessment,
-  type SentimentServiceOptions,
-} from "../../analysis/sentiment-service";
-import { buildNewsReadingPriorityList } from "../../analysis/news-reading-priority";
-import { enrichTopArticlesWithContentSummaries } from "../../analysis/top-article-content-summary";
-import { buildOutlookDistribution } from "../../analysis/outlook-service";
-import { buildRiskInvalidation } from "../../analysis/risk-invalidation";
-import {
-  buildPositionWording,
-  type PositionWordingServiceOptions,
-} from "../../analysis/position-wording";
-import { createBindingRegistry } from "../../skills/binding-registry";
-import { loadSkillsFromDirectory } from "../../skills/skill-loader";
-import { createOllamaInvoke } from "../../llm/ollama-client";
+  RunReviewServiceExecutionError,
+  runReviewService,
+} from "../../runtime/run-review-service";
+import type { RunReviewServiceEvent } from "../../runtime/run-review-events";
 import { createCliProgressIndicator } from "../progress-indicator";
 
 type Logger = Pick<typeof console, "log" | "error">;
@@ -82,24 +48,6 @@ function parseRunReviewArgs(argv: string[]): ParsedRunReviewArgs {
   return parsed;
 }
 
-function dateFromOverride(dateOverride: string | undefined): Date | undefined {
-  if (!dateOverride) {
-    return undefined;
-  }
-  return new Date(`${dateOverride}T08:00:00`);
-}
-
-function flatten<T>(input: T[][]): T[] {
-  return input.flatMap((items) => items);
-}
-
-function describeLlmError(error: unknown): string {
-  if (error instanceof Error) {
-    return `${error.name ? `${error.name}: ` : ""}${error.message}`.trim().slice(0, 800);
-  }
-  return String(error).slice(0, 800);
-}
-
 export interface RunReviewCommandOptions {
   argv?: string[];
   cwd?: string;
@@ -108,11 +56,37 @@ export interface RunReviewCommandOptions {
   fetchFn?: typeof fetch;
   triggerType?: TriggerType;
   scheduleSlotKey?: string;
-  llmBindings?: {
-    sentiment?: SentimentServiceOptions["llmBinding"];
-    positionWording?: PositionWordingServiceOptions["llmBinding"];
-  };
-  llmInvoke?: (prompt: { skillDescription: string; context: unknown }) => Promise<unknown>;
+  llmBindings?: RunReviewServiceOptions["llmBindings"];
+  llmInvoke?: RunReviewServiceOptions["llmInvoke"];
+}
+
+function handleCliEvent(
+  event: RunReviewServiceEvent,
+  progress: ReturnType<typeof createCliProgressIndicator>,
+  logger: Logger,
+  state: { lastErrorEventMessage?: string },
+): void {
+  if (event.type === "stage.started") {
+    progress.setLabel(event.label);
+    return;
+  }
+
+  if (event.type === "log.message") {
+    if (event.level === "error") {
+      state.lastErrorEventMessage = event.message;
+      progress.error(event.message);
+      return;
+    }
+    if (event.level === "warn") {
+      progress.error(event.message);
+      return;
+    }
+    return;
+  }
+
+  if (event.type === "run.skipped_duplicate") {
+    logger.log(event.message);
+  }
 }
 
 export async function runReviewCommand(options: RunReviewCommandOptions = {}): Promise<number> {
@@ -137,393 +111,50 @@ export async function runReviewCommand(options: RunReviewCommandOptions = {}): P
     return 1;
   }
 
-  const runId = createRunId();
   const progress = createCliProgressIndicator({
     logger,
     label: "Generating market review",
   });
+  const eventState: { lastErrorEventMessage?: string } = {};
 
   try {
     progress.start();
-    progress.setLabel("Loading config and skills");
 
-    const context = createAppContext({
+    const result = await runReviewService({
       cwd: options.cwd,
       env: options.env,
-    });
-
-    const baseDate = dateFromOverride(parsedArgs.dateOverride) ?? context.clock.now();
-    const generatedAt = baseDate.toISOString();
-    const feedCatalog = await readFeedCatalogFile(context.paths.rssFeedsPath);
-    const watchlist = await readWatchlistFile(context.paths.watchlistPath);
-    const llmInvoke =
-      options.llmInvoke ??
-      (context.env.llmBaseUrl && context.env.llmModel
-        ? createOllamaInvoke({
-            baseUrl: context.env.llmBaseUrl,
-            model: context.env.llmModel,
-            apiKey: context.env.llmApiKey,
-            fetchFn: options.fetchFn,
-          })
-        : undefined);
-
-    const bindingRegistry = createBindingRegistry({ llm: { invoke: llmInvoke } });
-    const loadedSkills = await loadSkillsFromDirectory({
-      skillsRootDir: context.paths.skillsDir,
-      allowedBindingTypes: bindingRegistry.supportedBindingTypes,
-    });
-    const enabledSkills = loadedSkills.filter((skill) => skill.enabled);
-    const sentimentSkill = enabledSkills.find((skill) => skill.type === "sentiment");
-    const outlookValidationSkill = enabledSkills.find(
-      (skill) => skill.bindingType === "deterministic_outlook_validation",
-    );
-    const reportFormatSkill = enabledSkills.find(
-      (skill) => skill.bindingType === "deterministic_report_format",
-    );
-    const positioningSkill = enabledSkills.find((skill) => skill.type === "positioning");
-
-    if (parsedArgs.triggerType === "scheduled" && options.scheduleSlotKey) {
-      progress.setLabel("Checking scheduled run lock");
-      const reviewSlotLockPath = buildRunLockPath(`${context.paths.logsDir}/review-slots`, options.scheduleSlotKey);
-      const slotLock = await acquireRunLock({
-        lockPath: reviewSlotLockPath,
-        lockKey: options.scheduleSlotKey,
-        runId,
-        now: baseDate,
-        ttlMs: 26 * 60 * 60 * 1000,
-      });
-      if (!slotLock.acquired) {
-        await appendRunLogEntry(context.paths.runLogPath, {
-          runId,
-          triggerType: "scheduled",
-          startedAt: generatedAt,
-          endedAt: generatedAt,
-          status: "skipped_duplicate",
-          llmStatus: "not_used",
-          messages: [`duplicate review run skipped for slot ${options.scheduleSlotKey}`],
-        });
-        return 0;
-      }
-    }
-
-    progress.setLabel("Initializing run log");
-    await appendRunLogEntry(
-      context.paths.runLogPath,
-      createStartedRunLogEntry({
-        runId,
-        triggerType: parsedArgs.triggerType,
-        startedAt: generatedAt,
-        messages: ["review run started"],
-      }),
-    );
-
-    progress.setLabel("Fetching RSS feeds");
-    const rssResponses = await fetchRssFeeds(feedCatalog.entries, {
       fetchFn: options.fetchFn,
-      now: baseDate,
-      lookbackHours: feedCatalog.effectiveLookbackHours,
-    });
-
-    const parsedNewsByFeed: NormalizedNewsItem[][] = rssResponses.map((response) =>
-      parseRssEntries(response.xml, {
-        source: response.feed.source,
-        category: response.feed.category,
-        ingestedAt: response.fetchedAt,
-      }).filter((item) => {
-        const published = new Date(item.publishedAt).getTime();
-        const cutoff = baseDate.getTime() - feedCatalog.effectiveLookbackHours * 60 * 60 * 1000;
-        return published >= cutoff;
-      }),
-    );
-    const newsItems: NewsItem[] = deduplicateNews(flatten(parsedNewsByFeed));
-
-    const providers = createProviderRegistry({
-      coingecko: createCoinGeckoClient({
-        fetchFn: options.fetchFn,
-        apiKey: context.env.coingeckoApiKey,
-      }),
-      fred: createFredClient({
-        fetchFn: options.fetchFn,
-        apiKey: context.env.fredApiKey,
-      }),
-      hyperliquid: createHyperliquidClient({
-        dex: context.env.hyperliquidDex ?? "xyz",
-      }),
-    });
-
-    const farsideEtfClient = createFarsideEtfClient({
-      fetchFn: options.fetchFn,
-    });
-
-    let etfFlowsError: string | undefined;
-    progress.setLabel("Fetching market and macro data");
-    const [marketSnapshot, macroContext, etfFlowsResult] = await Promise.all([
-      buildMarketSnapshot(watchlist.instruments as WatchlistInstrument[], providers),
-      fetchMacroSeriesContext(providers),
-      farsideEtfClient
-        .fetchEtfFlowSnapshot()
-        .then((value) => ({ ok: true as const, value }))
-        .catch((error) => ({ ok: false as const, error })),
-    ]);
-    const etfFlows: EtfFlowSnapshot | undefined = etfFlowsResult.ok ? etfFlowsResult.value : undefined;
-    if (!etfFlowsResult.ok) {
-      etfFlowsError = describeLlmError(etfFlowsResult.error);
-      progress.error(`ETF flow scraping failure (Farside): ${etfFlowsError}`);
-    }
-
-    const regime = detectRegime({ marketSnapshot, macroContext });
-    const marketProviders = new Set(marketSnapshot.map((item) => item.provider.toLowerCase()));
-    let reportStatus: "complete" | "incomplete" = "complete";
-    const omissionReasons: string[] = [];
-    let sentimentLlmError: string | undefined;
-    let topArticlesLlmError: string | undefined;
-    let positionLlmError: string | undefined;
-
-    progress.setLabel("Analyzing sentiment");
-    const sentiment = await generateSentimentAssessment(
-      { newsItems, marketSnapshot, regime },
-      sentimentSkill
-        ? {
-            skillExecution: {
-              skill: sentimentSkill,
-              execute: (payload) => bindingRegistry.execute(sentimentSkill, payload),
-            },
-            onLlmError: (error) => {
-              sentimentLlmError = describeLlmError(error);
-            },
-          }
-        : {
-            llmBinding: options.llmBindings?.sentiment,
-            onLlmError: (error) => {
-              sentimentLlmError = describeLlmError(error);
-            },
-          },
-    );
-    if (sentiment.status !== "complete") {
-      reportStatus = "incomplete";
-      const reason = sentimentLlmError
-        ? `LLM sentiment failure: ${sentimentLlmError}`
-        : "LLM sentiment failure";
-      omissionReasons.push(reason);
-      progress.error(reason);
-    }
-
-    progress.setLabel("Ranking top articles");
-    const topArticlesToRead = await buildNewsReadingPriorityList(
-      { newsItems, marketSnapshot, regime, sentiment },
-      {
-        llmInvoke,
-        now: baseDate,
-        // Large news universes (700+) can exceed LLM latency budgets if the candidate pool is too wide.
-        // Keep a strong prefilter while limiting total token load for the ranking pass.
-        prefilterLimit: 120,
-        chunkSize: 80,
-        onLlmError: (error) => {
-          topArticlesLlmError = describeLlmError(error);
-        },
+      triggerType: parsedArgs.triggerType,
+      dateOverride: parsedArgs.dateOverride,
+      scheduleSlotKey: options.scheduleSlotKey,
+      llmBindings: options.llmBindings,
+      llmInvoke: options.llmInvoke,
+      onEvent: async (event) => {
+        handleCliEvent(event, progress, logger, eventState);
       },
-    );
-    if (topArticlesLlmError) {
-      progress.error(`LLM top article ranking failure: ${topArticlesLlmError}`);
-    }
-    let topArticlesSummaryEnrichmentError: string | undefined;
-    let topArticlesSummaryLlmError: string | undefined;
-    let topArticleSummaryStats = {
-      total: topArticlesToRead.items.length,
-      fromArticleContent: 0,
-      fromRssFallback: 0,
-      unavailable: topArticlesToRead.items.length,
-      fetchErrors: 0,
-      llmSummaries: 0,
-      llmErrors: 0,
-    };
-    let enrichedTopArticlesToRead = topArticlesToRead;
-    try {
-      progress.setLabel("Summarizing top articles");
-      const summaryEnrichment = await enrichTopArticlesWithContentSummaries(
-        { topArticlesToRead, newsItems },
-        {
-          fetchFn: options.fetchFn,
-          llmInvoke,
-          onLlmError: (error) => {
-            topArticlesSummaryLlmError ??= describeLlmError(error);
-          },
-        },
-      );
-      enrichedTopArticlesToRead = summaryEnrichment.topArticlesToRead;
-      topArticleSummaryStats = summaryEnrichment.stats;
-    } catch (error) {
-      topArticlesSummaryEnrichmentError = describeLlmError(error);
-      progress.error(`Top article summary enrichment failure: ${topArticlesSummaryEnrichmentError}`);
-    }
-    let outlook = buildOutlookDistribution({ regime, sentiment });
-    if (outlookValidationSkill) {
-      const validated = (await bindingRegistry.execute(outlookValidationSkill, { outlook })) as {
-        valid: true;
-        outlook: typeof outlook;
-      };
-      outlook = validated.outlook;
-    }
-    const riskInvalidation = buildRiskInvalidation({ regime, marketSnapshot, macroContext });
-    progress.setLabel("Generating positioning guidance");
-    const positionWording = await buildPositionWording(
-      { regime, outlook },
-      positioningSkill
-        ? {
-            skillExecution: {
-              skill: positioningSkill,
-              execute: (payload) => bindingRegistry.execute(positioningSkill, payload),
-            },
-            onLlmError: (error) => {
-              positionLlmError = describeLlmError(error);
-            },
-          }
-        : {
-            llmBinding: options.llmBindings?.positionWording,
-            onLlmError: (error) => {
-              positionLlmError = describeLlmError(error);
-            },
-          },
-    );
-    if (positionWording.status !== "complete") {
-      reportStatus = "incomplete";
-      const reason = positionLlmError
-        ? `LLM position wording failure: ${positionLlmError}`
-        : "LLM position wording failure";
-      omissionReasons.push(reason);
-      progress.error(reason);
-    }
-
-    const metadata = createReportMetadata({
-      runId,
-      triggerType: parsedArgs.triggerType,
-      generatedAt,
-      status: reportStatus,
-      dataSources: [
-        "RSS",
-        "CoinGecko",
-        ...(marketProviders.has("hyperliquid") ? ["Hyperliquid"] : []),
-        "FRED",
-        ...(etfFlows ? ["Farside"] : []),
-      ],
-      omissionReasons,
     });
 
-    const markdown = renderMarketReportMarkdown({
-      generatedAt: metadata.generatedAt,
-      status: metadata.status,
-      triggerType: metadata.triggerType,
-      dataSources: metadata.dataSources,
-      omissionReasons: metadata.omissionReasons,
-      newsItems,
-      marketSnapshot,
-      macroContext,
-      regime,
-      sentiment,
-      topArticlesToRead: enrichedTopArticlesToRead,
-      outlook,
-      riskInvalidation,
-      positionWording,
-      etfFlows,
-      diagnostics: [
-        `Feeds processed: ${feedCatalog.entries.length}`,
-        `Watchlist enabled: ${watchlist.instruments.length}`,
-        `ETF flow datasets: ${etfFlows?.datasets.length ?? 0}`,
-        ...(etfFlows
-          ? etfFlows.datasets.map(
-              (dataset) => `ETF ${dataset.asset.toUpperCase()} rows=${dataset.rows.length} tickers=${dataset.etfTickers.length}`,
-            )
-          : []),
-        `Skills enabled: ${enabledSkills.length}`,
-        `Top article picks method: ${enrichedTopArticlesToRead.method}`,
-        `Top article picks selected: ${enrichedTopArticlesToRead.items.length}`,
-        `Top article candidate pool: ${enrichedTopArticlesToRead.candidateNewsEvaluated}/${enrichedTopArticlesToRead.totalNewsEvaluated}`,
-        `Top article content summaries: article=${topArticleSummaryStats.fromArticleContent}, llm=${topArticleSummaryStats.llmSummaries}, rss_fallback=${topArticleSummaryStats.fromRssFallback}, unavailable=${topArticleSummaryStats.unavailable}, fetch_errors=${topArticleSummaryStats.fetchErrors}, llm_errors=${topArticleSummaryStats.llmErrors}`,
-        ...(topArticlesLlmError ? [`Top article ranking LLM error: ${topArticlesLlmError}`] : []),
-        ...(topArticlesSummaryLlmError ? [`Top article summary LLM error: ${topArticlesSummaryLlmError}`] : []),
-        ...(topArticlesSummaryEnrichmentError
-          ? [`Top article summary enrichment error: ${topArticlesSummaryEnrichmentError}`]
-          : []),
-        ...(etfFlowsError ? [`ETF flow scraping error (Farside): ${etfFlowsError}`] : []),
-      ],
-    });
-    if (reportFormatSkill) {
-      progress.setLabel("Validating report format");
-      const reportFormatCheck = (await bindingRegistry.execute(reportFormatSkill, { markdown })) as {
-        valid: boolean;
-        issues: string[];
-      };
-      if (!reportFormatCheck.valid) {
-        throw new ValidationError("Report format skill validation failed", reportFormatCheck.issues);
-      }
+    if (result.status === "completed") {
+      const elapsed = progress.elapsedLabel();
+      progress.stop();
+      logger.log(`Report written: ${result.reportFilePath} (elapsed ${elapsed})`);
+      return 0;
     }
 
-    progress.setLabel("Writing report file");
-    const reportResult = await writeMarketReportFile({
-      reportsDir: context.paths.reportsDir,
-      markdown,
-      baseDate,
-    });
-
-    progress.setLabel("Finalizing run log");
-    await appendRunLogEntry(context.paths.runLogPath, {
-      runId,
-      triggerType: parsedArgs.triggerType,
-      startedAt: generatedAt,
-      endedAt: new Date().toISOString(),
-      status: reportStatus === "complete" ? "success" : "partial_success",
-      reportStatus,
-      reportFilePath: reportResult.filePath,
-      llmStatus:
-        reportStatus === "incomplete"
-          ? "error"
-          : llmInvoke
-            ? "success"
-            : "not_used",
-      messages: [
-        "review run completed",
-        `news_items=${newsItems.length}`,
-        `market_snapshot=${marketSnapshot.length}`,
-        `macro_context=${macroContext.length}`,
-        `etf_flow_datasets=${etfFlows?.datasets.length ?? 0}`,
-        ...(omissionReasons.length > 0 ? [`omissions=${omissionReasons.join("|")}`] : []),
-        ...(sentimentLlmError ? [`llm_sentiment_error=${sentimentLlmError}`] : []),
-        ...(topArticlesLlmError ? [`llm_top_articles_error=${topArticlesLlmError}`] : []),
-        ...(positionLlmError ? [`llm_position_error=${positionLlmError}`] : []),
-        ...(etfFlowsError ? [`etf_flow_scrape_error=${etfFlowsError}`] : []),
-      ],
-    });
-
-    const elapsed = progress.elapsedLabel();
     progress.stop();
-    logger.log(`Report written: ${reportResult.filePath} (elapsed ${elapsed})`);
     return 0;
   } catch (error) {
-    const err = error as NodeJS.ErrnoException;
-    const code = error instanceof ValidationError || err?.code === "ENOENT" ? 2 : 1;
     progress.stop();
-    logger.error(error instanceof Error ? error.message : String(error));
-
-    try {
-      const context = createAppContext({
-        cwd: options.cwd,
-        env: options.env,
-      });
-      await appendRunLogEntry(context.paths.runLogPath, {
-        runId,
-        triggerType: parsedArgs?.triggerType ?? "manual",
-        startedAt: new Date().toISOString(),
-        endedAt: new Date().toISOString(),
-        status: "failed",
-        llmStatus: "not_used",
-        messages: [error instanceof Error ? error.message : String(error)],
-      });
-    } catch {
-      // Avoid masking the original error path if logging cannot be initialized.
+    if (error instanceof RunReviewServiceExecutionError) {
+      if (eventState.lastErrorEventMessage !== error.message) {
+        logger.error(error.message);
+      }
+      return error.exitCode;
     }
-
-    return code;
+    logger.error(error instanceof Error ? error.message : String(error));
+    return 1;
   } finally {
     progress.stop();
   }
 }
+

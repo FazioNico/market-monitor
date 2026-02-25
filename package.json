@@ -5,6 +5,9 @@
   "private": true,
   "scripts": {
     "dev": "bun src/index.ts",
+    "dev:server": "bun server/src/index.ts",
+    "dev:web": "bun --cwd web run dev",
+    "build:web": "bun --cwd web run build",
     "build": "bunx tsc --noEmit",
     "start": "bun src/index.ts",
     "start:report": "bun run dev -- review run",

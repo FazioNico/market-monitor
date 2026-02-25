@@ -41,57 +41,95 @@ function truncate(input: string, max = 280): string {
   return `${input.slice(0, max - 1).trimEnd()}…`;
 }
 
+function warnSkippedFeedEntry(input: {
+  kind: "RSS" | "Atom";
+  source: string;
+  category: string;
+  error: unknown;
+}): void {
+  const message = input.error instanceof Error ? input.error.message : String(input.error);
+  console.warn(`${input.kind} entry skipped (${input.source}/${input.category}): ${message}`);
+}
+
 function normalizeRssItems(input: unknown, meta: { source: string; category: string; ingestedAt: string }) {
   const items = asArray<any>((input as any)?.rss?.channel?.item);
-  return items.map((item) => {
-    const title = String(item?.title ?? "").trim();
-    const link = String(item?.link ?? "").trim();
-    const summary = truncate(stripHtml(item?.description ?? item?.["content:encoded"] ?? ""));
-    const publishedAt = toIsoDate(String(item?.pubDate ?? item?.published ?? ""));
+  const normalized: NormalizedNewsItem[] = [];
 
-    if (!title || !link) {
-      throw new ValidationError("RSS item missing required fields", ["title and link are required"]);
+  for (const item of items) {
+    try {
+      const title = String(item?.title ?? "").trim();
+      const link = String(item?.link ?? "").trim();
+      const summary = truncate(stripHtml(item?.description ?? item?.["content:encoded"] ?? ""));
+      const publishedAt = toIsoDate(String(item?.pubDate ?? item?.published ?? ""));
+
+      if (!title || !link) {
+        throw new ValidationError("RSS item missing required fields", ["title and link are required"]);
+      }
+
+      normalized.push({
+        title,
+        link,
+        summary,
+        publishedAt,
+        source: meta.source,
+        category: meta.category,
+        ingestedAt: meta.ingestedAt,
+      } satisfies NormalizedNewsItem);
+    } catch (error) {
+      warnSkippedFeedEntry({
+        kind: "RSS",
+        source: meta.source,
+        category: meta.category,
+        error,
+      });
     }
+  }
 
-    return {
-      title,
-      link,
-      summary,
-      publishedAt,
-      source: meta.source,
-      category: meta.category,
-      ingestedAt: meta.ingestedAt,
-    } satisfies NormalizedNewsItem;
-  });
+  return normalized;
 }
 
 function normalizeAtomEntries(input: unknown, meta: { source: string; category: string; ingestedAt: string }) {
   const entries = asArray<any>((input as any)?.feed?.entry);
-  return entries.map((entry) => {
-    const title = String(entry?.title?.["#text"] ?? entry?.title ?? "").trim();
-    const linkValue = Array.isArray(entry?.link)
-      ? entry.link.find((x: any) => x?.["@_rel"] === "alternate")?.["@_href"] ?? entry.link[0]?.["@_href"]
-      : entry?.link?.["@_href"] ?? entry?.link;
-    const link = String(linkValue ?? "").trim();
-    const summary = truncate(
-      stripHtml(String(entry?.summary?.["#text"] ?? entry?.summary ?? entry?.content?.["#text"] ?? entry?.content ?? "")),
-    );
-    const publishedAt = toIsoDate(String(entry?.updated ?? entry?.published ?? ""));
+  const normalized: NormalizedNewsItem[] = [];
 
-    if (!title || !link) {
-      throw new ValidationError("Atom entry missing required fields", ["title and link are required"]);
+  for (const entry of entries) {
+    try {
+      const title = String(entry?.title?.["#text"] ?? entry?.title ?? "").trim();
+      const linkValue = Array.isArray(entry?.link)
+        ? entry.link.find((x: any) => x?.["@_rel"] === "alternate")?.["@_href"] ?? entry.link[0]?.["@_href"]
+        : entry?.link?.["@_href"] ?? entry?.link;
+      const link = String(linkValue ?? "").trim();
+      const summary = truncate(
+        stripHtml(
+          String(entry?.summary?.["#text"] ?? entry?.summary ?? entry?.content?.["#text"] ?? entry?.content ?? ""),
+        ),
+      );
+      const publishedAt = toIsoDate(String(entry?.updated ?? entry?.published ?? ""));
+
+      if (!title || !link) {
+        throw new ValidationError("Atom entry missing required fields", ["title and link are required"]);
+      }
+
+      normalized.push({
+        title,
+        link,
+        summary,
+        publishedAt,
+        source: meta.source,
+        category: meta.category,
+        ingestedAt: meta.ingestedAt,
+      } satisfies NormalizedNewsItem);
+    } catch (error) {
+      warnSkippedFeedEntry({
+        kind: "Atom",
+        source: meta.source,
+        category: meta.category,
+        error,
+      });
     }
+  }
 
-    return {
-      title,
-      link,
-      summary,
-      publishedAt,
-      source: meta.source,
-      category: meta.category,
-      ingestedAt: meta.ingestedAt,
-    } satisfies NormalizedNewsItem;
-  });
+  return normalized;
 }
 
 export function parseRssEntries(xml: string, meta: { source: string; category: string; ingestedAt: string }) {

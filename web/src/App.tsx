@@ -14,7 +14,7 @@ const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "h
 type ConnectionState = "idle" | "connecting" | "reconnecting" | "live" | "closed" | "error";
 type StageRunStatus = "running" | "completed";
 type LiveRunTerminalStatus = "idle" | "running" | "completed" | "failed" | "skipped_duplicate";
-type DashboardViewKey = "overview" | "analysis" | "data" | "ops" | "report";
+type DashboardViewKey = "overview" | "news" | "data" | "ops" | "report";
 
 interface LiveLogLine {
   at: string;
@@ -74,12 +74,28 @@ const SECTION_READINESS_ITEMS: Array<{ key: RunReviewSectionKey; label: string }
 ];
 
 const DASHBOARD_VIEWS: Array<{ key: DashboardViewKey; label: string; hint: string }> = [
-  { key: "overview", label: "Overview", hint: "Essentiel live" },
-  { key: "analysis", label: "Analysis", hint: "Signal / biais / invalidation" },
-  { key: "data", label: "Data", hint: "Marché / macro / ingestion" },
+  { key: "overview", label: "Overview", hint: "Live essentials" },
+  { key: "news", label: "News", hint: "Top articles / briefing" },
+  { key: "data", label: "Data", hint: "Market / macro / ingestion" },
   { key: "ops", label: "Ops", hint: "Timeline + logs" },
-  { key: "report", label: "Report", hint: "Markdown final" },
+  { key: "report", label: "Report", hint: "Final markdown" },
 ];
+
+const SECTION_STAGE_MAP: Record<RunReviewSectionKey, RunReviewStageKey[]> = {
+  config: ["load_config"],
+  news: ["fetch_rss"],
+  marketSnapshot: ["fetch_market_macro"],
+  macroContext: ["fetch_market_macro"],
+  etfFlows: ["fetch_market_macro"],
+  regime: ["detect_regime"],
+  sentiment: ["analyze_sentiment"],
+  topArticles: ["rank_top_articles", "summarize_top_articles"],
+  outlook: ["build_outlook"],
+  riskInvalidation: ["build_risk_invalidation"],
+  positionWording: ["generate_positioning"],
+  diagnostics: ["render_report"],
+  report: ["render_report", "write_report", "finalize_run_log"],
+};
 
 function cx(...values: Array<string | false | null | undefined>): string {
   return values.filter(Boolean).join(" ");
@@ -91,6 +107,25 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function asArray(value: unknown): unknown[] {
   return Array.isArray(value) ? value : [];
+}
+
+function asString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function asNumber(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function asBoolean(value: unknown): boolean | undefined {
+  return typeof value === "boolean" ? value : undefined;
+}
+
+function asStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
 }
 
 function createInitialLiveRunState(runId: string): LiveRunState {
@@ -227,7 +262,7 @@ function formatDateTime(value?: string): string {
   if (!value) return "n/a";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat("fr-FR", {
+  return new Intl.DateTimeFormat("en-US", {
     dateStyle: "short",
     timeStyle: "medium",
   }).format(date);
@@ -264,6 +299,99 @@ function prettyJson(value: unknown): string {
   }
 }
 
+type EtfFlowUiRow = {
+  date: string;
+  totalNetFlowUsdM: number | null;
+  byEtfNetFlowUsdM: Record<string, number | null>;
+};
+
+type EtfFlowUiDataset = {
+  asset?: string;
+  source?: string;
+  pageUrl?: string;
+  capturedAt?: string;
+  etfTickers: string[];
+  rows: EtfFlowUiRow[];
+};
+
+type EtfFlowsSectionPayload = {
+  available?: boolean;
+  error?: string;
+  snapshot?: {
+    source?: string;
+    capturedAt?: string;
+    datasets: EtfFlowUiDataset[];
+  };
+};
+
+function getEtfFlowsPayload(value: unknown): EtfFlowsSectionPayload | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  let snapshot: EtfFlowsSectionPayload["snapshot"];
+  if (isRecord(value.snapshot)) {
+    const datasets = asArray(value.snapshot.datasets)
+      .map((dataset): EtfFlowUiDataset | undefined => {
+        if (!isRecord(dataset)) return undefined;
+
+        const rows = asArray(dataset.rows)
+          .map((row): EtfFlowUiRow | undefined => {
+            if (!isRecord(row)) return undefined;
+            const date = asString(row.date);
+            if (!date) return undefined;
+
+            const byEtfNetFlowUsdM: Record<string, number | null> = {};
+            if (isRecord(row.byEtfNetFlowUsdM)) {
+              for (const [ticker, rawValue] of Object.entries(row.byEtfNetFlowUsdM)) {
+                if (typeof rawValue === "number" && Number.isFinite(rawValue)) {
+                  byEtfNetFlowUsdM[ticker] = rawValue;
+                  continue;
+                }
+                if (rawValue === null) {
+                  byEtfNetFlowUsdM[ticker] = null;
+                }
+              }
+            }
+
+            return {
+              date,
+              totalNetFlowUsdM:
+                typeof row.totalNetFlowUsdM === "number" && Number.isFinite(row.totalNetFlowUsdM)
+                  ? row.totalNetFlowUsdM
+                  : row.totalNetFlowUsdM === null
+                    ? null
+                    : null,
+              byEtfNetFlowUsdM,
+            };
+          })
+          .filter((row): row is EtfFlowUiRow => Boolean(row));
+
+        return {
+          asset: asString(dataset.asset),
+          source: asString(dataset.source),
+          pageUrl: asString(dataset.pageUrl),
+          capturedAt: asString(dataset.capturedAt),
+          etfTickers: asStringArray(dataset.etfTickers),
+          rows,
+        };
+      })
+      .filter((dataset): dataset is EtfFlowUiDataset => Boolean(dataset));
+
+    snapshot = {
+      source: asString(value.snapshot.source),
+      capturedAt: asString(value.snapshot.capturedAt),
+      datasets,
+    };
+  }
+
+  return {
+    available: asBoolean(value.available),
+    error: asString(value.error),
+    snapshot,
+  };
+}
+
 function getTopArticlesPayload(value: unknown): { items: Array<Record<string, unknown>>; method?: string } | undefined {
   if (!isRecord(value)) return undefined;
   const items = asArray(value.items).filter((item): item is Record<string, unknown> => isRecord(item));
@@ -283,6 +411,148 @@ function getMacroPayload(value: unknown): Array<Record<string, unknown>> {
 
 function getReportPayload(value: unknown): Record<string, unknown> | undefined {
   return isRecord(value) ? value : undefined;
+}
+
+function getRegimePayload(value: unknown):
+  | {
+      label?: "risk_on" | "risk_off" | "transition" | string;
+      rationale?: string;
+      dispersionSignal?: string;
+      correlationSignal?: string;
+      momentumSignal?: string;
+      macroSignal?: string;
+    }
+  | undefined {
+  if (!isRecord(value)) return undefined;
+  return {
+    label: asString(value.label),
+    rationale: asString(value.rationale),
+    dispersionSignal: asString(value.dispersionSignal),
+    correlationSignal: asString(value.correlationSignal),
+    momentumSignal: asString(value.momentumSignal),
+    macroSignal: asString(value.macroSignal),
+  };
+}
+
+function getSentimentPayload(value: unknown):
+  | {
+      score?: number;
+      method?: string;
+      narrativeSummary?: string;
+      priceActionCoherence?: string;
+      status?: string;
+    }
+  | undefined {
+  if (!isRecord(value)) return undefined;
+  return {
+    score: asNumber(value.score),
+    method: asString(value.method),
+    narrativeSummary: asString(value.narrativeSummary),
+    priceActionCoherence: asString(value.priceActionCoherence),
+    status: asString(value.status),
+  };
+}
+
+function getOutlookPayload(value: unknown):
+  | {
+      bullPct?: number;
+      basePct?: number;
+      bearPct?: number;
+      primaryScenario?: string;
+      justification?: string;
+      constraintValidated?: boolean;
+    }
+  | undefined {
+  if (!isRecord(value)) return undefined;
+  return {
+    bullPct: asNumber(value.bullPct),
+    basePct: asNumber(value.basePct),
+    bearPct: asNumber(value.bearPct),
+    primaryScenario: asString(value.primaryScenario),
+    justification: asString(value.justification),
+    constraintValidated: typeof value.constraintValidated === "boolean" ? value.constraintValidated : undefined,
+  };
+}
+
+function getPositioningPayload(value: unknown):
+  | {
+      currentBias?: string;
+      addExposureConditions: string[];
+      reduceExposureConditions: string[];
+      noTradeZones: string[];
+      timeHorizon?: string;
+      status?: string;
+    }
+  | undefined {
+  if (!isRecord(value)) return undefined;
+  return {
+    currentBias: asString(value.currentBias),
+    addExposureConditions: asStringArray(value.addExposureConditions),
+    reduceExposureConditions: asStringArray(value.reduceExposureConditions),
+    noTradeZones: asStringArray(value.noTradeZones),
+    timeHorizon: asString(value.timeHorizon),
+    status: asString(value.status),
+  };
+}
+
+function getRiskInvalidationPayload(value: unknown):
+  | {
+      invalidationConditions: string[];
+      keyPriceThresholds: string[];
+      criticalMacroEvents: string[];
+    }
+  | undefined {
+  if (!isRecord(value)) return undefined;
+  return {
+    invalidationConditions: asStringArray(value.invalidationConditions),
+    keyPriceThresholds: asStringArray(value.keyPriceThresholds),
+    criticalMacroEvents: asStringArray(value.criticalMacroEvents),
+  };
+}
+
+function formatUsdMillions(value: number | null | undefined): string {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return "N/A";
+  }
+  const sign = value > 0 ? "+" : value < 0 ? "-" : "";
+  return `${sign}${Math.abs(value).toFixed(1)} US$m`;
+}
+
+function etfFlowDirection(value: number | null | undefined): "inflow" | "outflow" | "flat" | "n/a" {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "n/a";
+  if (value > 0) return "inflow";
+  if (value < 0) return "outflow";
+  return "flat";
+}
+
+function getEtfRowTotalNetFlowUsdM(row: EtfFlowUiRow): number | null {
+  if (typeof row.totalNetFlowUsdM === "number" && Number.isFinite(row.totalNetFlowUsdM)) {
+    return row.totalNetFlowUsdM;
+  }
+  const values = Object.values(row.byEtfNetFlowUsdM).filter((value): value is number => typeof value === "number");
+  if (values.length === 0) {
+    return null;
+  }
+  return values.reduce((sum, value) => sum + value, 0);
+}
+
+function computeRecentEtfCumulative(dataset: EtfFlowUiDataset, days: number): number | null {
+  const rows = dataset.rows.slice(-days);
+  if (rows.length === 0) {
+    return null;
+  }
+  const totals = rows
+    .map((row) => getEtfRowTotalNetFlowUsdM(row))
+    .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+  if (totals.length === 0) {
+    return null;
+  }
+  return totals.reduce((sum, value) => sum + value, 0);
+}
+
+function formatEtfAssetLabel(asset?: string): string {
+  if (!asset) return "ETF Flows";
+  return `${asset.toUpperCase()} Spot ETF Flows`;
 }
 
 function ConnectionBadge({ status }: { status: ConnectionState }) {
@@ -380,6 +650,23 @@ function getOrderedStages(state?: LiveRunState): StageState[] {
   return state.stagesOrder.map((stageKey) => state.stages[stageKey]).filter(Boolean) as StageState[];
 }
 
+function getSectionReadinessState(
+  state: LiveRunState | undefined,
+  sectionKey: RunReviewSectionKey,
+): "standby" | "running" | "ready" {
+  if (!state) {
+    return "standby";
+  }
+
+  const linkedStages = SECTION_STAGE_MAP[sectionKey] ?? [];
+  const hasRunningStage = linkedStages.some((stageKey) => state.stages[stageKey]?.status === "running");
+  if (hasRunningStage) {
+    return "running";
+  }
+
+  return state.sections[sectionKey] !== undefined ? "ready" : "standby";
+}
+
 function ActivityOverviewCard({
   state,
   connectionState,
@@ -389,8 +676,8 @@ function ActivityOverviewCard({
 }) {
   if (!state) {
     return (
-      <Panel title="Live Activity" subtitle="Résumé du flux temps réel">
-        <div className="text-sm text-zinc-400">Sélectionne un run pour voir l’activité.</div>
+      <Panel title="Live Activity" subtitle="Live stream summary">
+        <div className="text-sm text-zinc-400">Select a run to view activity.</div>
       </Panel>
     );
   }
@@ -438,7 +725,7 @@ function ActivityOverviewCard({
   ] as const;
 
   return (
-    <Panel title="Live Activity" subtitle="Cartes compactes pour suivre le run sans grand panneau vide">
+    <Panel title="Live Activity" subtitle="Compact cards for monitoring the run without a large empty panel">
       <div className="grid gap-2 sm:grid-cols-2">
         {metricCards.map((card) => (
           <div key={card.label} className={cx("rounded-xl border px-3 py-2.5", card.tone)}>
@@ -458,18 +745,319 @@ function ActivityOverviewCard({
       <div className="mt-3 rounded-xl border border-white/10 bg-black/20 p-3">
         <div className="mb-2 text-[11px] uppercase tracking-[0.16em] text-zinc-400">Recent Events</div>
         {recentLogs.length === 0 ? (
-          <div className="text-sm text-zinc-500">Pas encore de logs notables.</div>
+          <div className="text-sm text-zinc-500">No notable logs yet.</div>
         ) : (
           <div className="space-y-2">
             {recentLogs.map((line, index) => (
               <div key={`${line.at}-${index}`} className="grid grid-cols-[56px_40px_1fr] gap-2 text-xs">
-                <span className="text-zinc-500">{new Date(line.at).toLocaleTimeString("fr-FR")}</span>
+                <span className="text-zinc-500">{new Date(line.at).toLocaleTimeString("en-US")}</span>
                 <span className={cx("uppercase tracking-wide", levelTone(line.level))}>{line.level}</span>
                 <span className="text-zinc-300">{line.message}</span>
               </div>
             ))}
           </div>
         )}
+      </div>
+    </Panel>
+  );
+}
+
+function RegimeSummaryCard({ state }: { state?: LiveRunState }) {
+  const regime = getRegimePayload(state?.sections.regime);
+  const label = regime?.label ?? "pending";
+  const labelText =
+    label === "risk_on" ? "Risk On" : label === "risk_off" ? "Risk Off" : label === "transition" ? "Transition" : label;
+  const tone =
+    label === "risk_on"
+      ? "border-emerald-300/20 bg-emerald-400/10 text-emerald-100"
+      : label === "risk_off"
+        ? "border-rose-300/20 bg-rose-400/10 text-rose-100"
+        : label === "transition"
+          ? "border-amber-300/20 bg-amber-400/10 text-amber-100"
+          : "border-white/10 bg-white/[0.02] text-zinc-300";
+
+  const signals = [
+    { label: "Dispersion", value: regime?.dispersionSignal },
+    { label: "Correlation", value: regime?.correlationSignal },
+    { label: "Momentum", value: regime?.momentumSignal },
+    { label: "Macro", value: regime?.macroSignal },
+  ];
+
+  return (
+    <Panel title="Regime" subtitle="Executive summary of the current market regime">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className={cx("data-pill border", tone, "text-sm font-semibold")}>{labelText}</span>
+      </div>
+
+      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+        {signals.map((signal) => (
+          <div key={signal.label} className="rounded-xl border border-white/10 bg-white/[0.02] p-2.5">
+            <div className="text-[11px] uppercase tracking-[0.16em] text-zinc-400">{signal.label}</div>
+            <div className="mt-1 text-sm leading-snug text-zinc-200">{signal.value ?? "Pending..."}</div>
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-3 rounded-xl border border-white/10 bg-black/20 p-3">
+        <div className="text-[11px] uppercase tracking-[0.16em] text-zinc-400">Rationale</div>
+        <p className="mt-1 text-sm leading-relaxed text-zinc-200">
+          {regime?.rationale ?? "The regime rationale will appear here as soon as the analysis is ready."}
+        </p>
+      </div>
+    </Panel>
+  );
+}
+
+function SentimentSummaryCard({ state }: { state?: LiveRunState }) {
+  const sentiment = getSentimentPayload(state?.sections.sentiment);
+  const score = sentiment?.score;
+  const scorePct = typeof score === "number" ? Math.max(0, Math.min(100, score * 10)) : undefined;
+  const scoreTone =
+    score === undefined
+      ? "border-white/10 bg-white/[0.02] text-zinc-300"
+      : score >= 7
+        ? "border-emerald-300/20 bg-emerald-400/10 text-emerald-100"
+        : score >= 4
+          ? "border-amber-300/20 bg-amber-400/10 text-amber-100"
+          : "border-rose-300/20 bg-rose-400/10 text-rose-100";
+
+  return (
+    <Panel title="Sentiment" subtitle="Sentiment readout and price-action coherence">
+      <div className="grid gap-3 sm:grid-cols-[auto_1fr] sm:items-center">
+        <div className={cx("rounded-2xl border px-4 py-3", scoreTone)}>
+          <div className="text-[11px] uppercase tracking-[0.16em] text-zinc-400">Score</div>
+          <div className="mt-1 font-display text-2xl font-semibold">
+            {typeof score === "number" ? score.toFixed(1) : "--"}
+          </div>
+        </div>
+        <div className="min-w-0">
+          <div className="mb-2 flex flex-wrap gap-2">
+            {sentiment?.method ? <span className="data-pill">method: {sentiment.method}</span> : null}
+            {sentiment?.status ? <span className="data-pill">status: {sentiment.status}</span> : null}
+          </div>
+          <div className="h-2 overflow-hidden rounded-full bg-white/5">
+            <div
+              className="h-full rounded-full bg-gradient-to-r from-rose-400 via-amber-300 to-emerald-300 transition-[width] duration-300"
+              style={{ width: `${scorePct ?? 6}%` }}
+            />
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-3 grid gap-2">
+        <div className="rounded-xl border border-white/10 bg-white/[0.02] p-3">
+          <div className="text-[11px] uppercase tracking-[0.16em] text-zinc-400">Price Action Coherence</div>
+          <p className="mt-1 text-sm leading-relaxed text-zinc-200">
+            {sentiment?.priceActionCoherence ?? "Waiting for the coherence assessment."}
+          </p>
+        </div>
+        <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+          <div className="text-[11px] uppercase tracking-[0.16em] text-zinc-400">Narrative Summary</div>
+          <p className="mt-1 text-sm leading-relaxed text-zinc-200">
+            {sentiment?.narrativeSummary ?? "The narrative summary will appear here once sentiment is computed."}
+          </p>
+        </div>
+      </div>
+    </Panel>
+  );
+}
+
+function CompactListBlock({
+  title,
+  items,
+  emptyLabel,
+  tone = "neutral",
+}: {
+  title: string;
+  items: string[];
+  emptyLabel: string;
+  tone?: "neutral" | "positive" | "negative" | "warning";
+}) {
+  const toneClass =
+    tone === "positive"
+      ? "border-emerald-300/15 bg-emerald-400/5"
+      : tone === "negative"
+        ? "border-rose-300/15 bg-rose-400/5"
+        : tone === "warning"
+          ? "border-amber-300/15 bg-amber-400/5"
+          : "border-white/10 bg-white/[0.02]";
+
+  return (
+    <div className={cx("rounded-xl border p-3", toneClass)}>
+      <div className="flex items-center justify-between gap-2">
+        <div className="text-[11px] uppercase tracking-[0.16em] text-zinc-400">{title}</div>
+        <span className="text-xs text-zinc-500">{items.length}</span>
+      </div>
+      {items.length === 0 ? (
+        <div className="mt-2 text-sm text-zinc-500">{emptyLabel}</div>
+      ) : (
+        <ul className="mt-2 space-y-1.5">
+          {items.slice(0, 4).map((item, index) => (
+            <li key={`${title}-${index}`} className="flex gap-2 text-sm leading-relaxed text-zinc-200">
+              <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-white/30" />
+              <span>{item}</span>
+            </li>
+          ))}
+          {items.length > 4 ? <li className="text-xs text-zinc-500">+ {items.length - 4} more items</li> : null}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function OutlookSummaryCard({ state }: { state?: LiveRunState }) {
+  const outlook = getOutlookPayload(state?.sections.outlook);
+  const bull = Math.max(0, outlook?.bullPct ?? 0);
+  const base = Math.max(0, outlook?.basePct ?? 0);
+  const bear = Math.max(0, outlook?.bearPct ?? 0);
+  const total = Math.max(1, bull + base + bear);
+  const bullW = (bull / total) * 100;
+  const baseW = (base / total) * 100;
+  const bearW = (bear / total) * 100;
+  const primary = outlook?.primaryScenario ?? "pending";
+  const primaryText =
+    primary === "bull" ? "Bull" : primary === "base" ? "Base" : primary === "bear" ? "Bear" : "Pending";
+  const primaryTone =
+    primary === "bull"
+      ? "border-emerald-300/20 bg-emerald-400/10 text-emerald-100"
+      : primary === "bear"
+        ? "border-rose-300/20 bg-rose-400/10 text-rose-100"
+        : primary === "base"
+          ? "border-cyan-300/20 bg-cyan-400/10 text-cyan-100"
+          : "border-white/10 bg-white/[0.02] text-zinc-300";
+
+  return (
+    <Panel title="Outlook" subtitle="Scenario probabilities and central rationale">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className={cx("data-pill border", primaryTone)}>{primaryText}</span>
+        {typeof outlook?.constraintValidated === "boolean" ? (
+          <span
+            className={cx(
+              "data-pill border",
+              outlook.constraintValidated
+                ? "border-emerald-300/20 bg-emerald-400/10 text-emerald-100"
+                : "border-amber-300/20 bg-amber-400/10 text-amber-100",
+            )}
+          >
+            {outlook.constraintValidated ? "Constraint validated" : "Constraint pending"}
+          </span>
+        ) : null}
+      </div>
+
+      <div className="mt-3 overflow-hidden rounded-xl border border-white/10 bg-black/20">
+        <div className="flex h-3 w-full">
+          <div className="bg-emerald-400/70" style={{ width: `${bullW}%` }} />
+          <div className="bg-cyan-400/70" style={{ width: `${baseW}%` }} />
+          <div className="bg-rose-400/70" style={{ width: `${bearW}%` }} />
+        </div>
+      </div>
+      <div className="mt-3 grid grid-cols-3 gap-2">
+        {[
+          { label: "Bull", value: outlook?.bullPct, tone: "text-emerald-200" },
+          { label: "Base", value: outlook?.basePct, tone: "text-cyan-200" },
+          { label: "Bear", value: outlook?.bearPct, tone: "text-rose-200" },
+        ].map((item) => (
+          <div key={item.label} className="rounded-xl border border-white/10 bg-white/[0.02] p-2.5">
+            <div className="text-[11px] uppercase tracking-[0.16em] text-zinc-400">{item.label}</div>
+            <div className={cx("mt-1 text-base font-semibold", item.tone)}>
+              {typeof item.value === "number" ? `${item.value}%` : "--"}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-3 rounded-xl border border-white/10 bg-white/[0.02] p-3">
+        <div className="text-[11px] uppercase tracking-[0.16em] text-zinc-400">Executive Rationale</div>
+        <p className="mt-1 text-sm leading-relaxed text-zinc-200">
+          {outlook?.justification ?? "The outlook rationale will appear here once it is computed."}
+        </p>
+      </div>
+    </Panel>
+  );
+}
+
+function PositioningSummaryCard({ state }: { state?: LiveRunState }) {
+  const positioning = getPositioningPayload(state?.sections.positionWording);
+  const status = positioning?.status ?? "pending";
+  const statusTone =
+    status === "complete"
+      ? "border-emerald-300/20 bg-emerald-400/10 text-emerald-100"
+      : status.includes("omitted")
+        ? "border-amber-300/20 bg-amber-400/10 text-amber-100"
+        : "border-white/10 bg-white/[0.02] text-zinc-300";
+
+  return (
+    <Panel title="Positioning" subtitle="Execution framework and exposure rules">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className={cx("data-pill border", statusTone)}>{status.replace(/_/g, " ")}</span>
+        {positioning?.timeHorizon ? <span className="data-pill">{positioning.timeHorizon}</span> : null}
+      </div>
+
+      <div className="mt-3 rounded-xl border border-white/10 bg-black/20 p-3">
+        <div className="text-[11px] uppercase tracking-[0.16em] text-zinc-400">Current Bias</div>
+        <p className="mt-1 text-sm leading-relaxed text-zinc-100">
+          {positioning?.currentBias ?? "Positioning bias is not available yet."}
+        </p>
+      </div>
+
+      <div className="mt-3 grid gap-2">
+        <CompactListBlock
+          title="Add Exposure"
+          items={positioning?.addExposureConditions ?? []}
+          emptyLabel="No add-exposure conditions yet."
+          tone="positive"
+        />
+        <CompactListBlock
+          title="Reduce Exposure"
+          items={positioning?.reduceExposureConditions ?? []}
+          emptyLabel="No reduce-exposure conditions yet."
+          tone="warning"
+        />
+        <CompactListBlock
+          title="No Trade Zones"
+          items={positioning?.noTradeZones ?? []}
+          emptyLabel="No no-trade zones defined."
+          tone="negative"
+        />
+      </div>
+    </Panel>
+  );
+}
+
+function RiskInvalidationSummaryCard({ state }: { state?: LiveRunState }) {
+  const risk = getRiskInvalidationPayload(state?.sections.riskInvalidation);
+  const totalTriggers =
+    (risk?.invalidationConditions.length ?? 0) +
+    (risk?.keyPriceThresholds.length ?? 0) +
+    (risk?.criticalMacroEvents.length ?? 0);
+
+  return (
+    <Panel title="Risk Invalidation" subtitle="Triggers to monitor that invalidate the current scenario">
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <span className="data-pill border border-amber-300/20 bg-amber-400/10 text-amber-100">
+          {totalTriggers} trigger{totalTriggers > 1 ? "s" : ""}
+        </span>
+      </div>
+
+      <div className="grid gap-2">
+        <CompactListBlock
+          title="Invalidation Conditions"
+          items={risk?.invalidationConditions ?? []}
+          emptyLabel="No invalidation conditions yet."
+          tone="warning"
+        />
+        <CompactListBlock
+          title="Key Price Thresholds"
+          items={risk?.keyPriceThresholds ?? []}
+          emptyLabel="No critical price thresholds yet."
+          tone="neutral"
+        />
+        <CompactListBlock
+          title="Critical Macro Events"
+          items={risk?.criticalMacroEvents ?? []}
+          emptyLabel="No critical macro events yet."
+          tone="negative"
+        />
       </div>
     </Panel>
   );
@@ -483,14 +1071,14 @@ function TimelineCard({
   compact?: boolean;
 }) {
   if (!state) {
-    return <Panel title="Pipeline Timeline">Sélectionne un run pour ouvrir le flux.</Panel>;
+    return <Panel title="Pipeline Timeline">Select a run to open the stream.</Panel>;
   }
 
   const orderedStages = getOrderedStages(state);
   return (
-    <Panel title="Pipeline Timeline" subtitle="Stages du pipeline, complétés au fil du streaming">
+    <Panel title="Pipeline Timeline" subtitle="Pipeline stages completed progressively through streaming">
       {orderedStages.length === 0 ? (
-        <div className="text-sm text-zinc-400">Aucun événement reçu pour ce run (pas encore démarré ou run historique CLI sans event log).</div>
+        <div className="text-sm text-zinc-400">No events received for this run yet (not started, or historical CLI run without event log).</div>
       ) : (
         <ol className={cx("space-y-3", compact && "max-h-[26rem] overflow-auto pr-1")}>
           {orderedStages.map((stage) => (
@@ -530,14 +1118,14 @@ function TimelineCard({
 function LogsCard({ state }: { state?: LiveRunState }) {
   const rows = state?.logs ?? [];
   return (
-    <Panel title="Live Logs" subtitle="Messages système et erreurs non fatales">
+    <Panel title="Live Logs" subtitle="System messages and non-fatal errors">
       {rows.length === 0 ? (
-        <div className="text-sm text-zinc-400">Pas de logs pour le moment.</div>
+        <div className="text-sm text-zinc-400">No logs yet.</div>
       ) : (
         <div className="max-h-72 space-y-2 overflow-auto rounded-xl border border-white/10 bg-black/20 p-3 font-mono text-xs">
           {rows.map((line, index) => (
             <div key={`${line.at}-${index}`} className="grid grid-cols-[88px_50px_1fr] gap-2">
-              <span className="text-zinc-500">{new Date(line.at).toLocaleTimeString("fr-FR")}</span>
+              <span className="text-zinc-500">{new Date(line.at).toLocaleTimeString("en-US")}</span>
               <span className={cx("uppercase tracking-wide", levelTone(line.level))}>{line.level}</span>
               <span className="text-zinc-300">{line.message}</span>
             </div>
@@ -556,12 +1144,12 @@ function TopArticlesCard({ state }: { state?: LiveRunState }) {
   return (
     <Panel
       title="Top Articles"
-      subtitle="Classement + enrichissement progressif des résumés"
+      subtitle="Ranking + progressive summary enrichment"
       actions={
         progress ? (
           <div className="data-pill gap-2">
             <span className="font-mono text-[11px]">{progress.completed}/{progress.total}</span>
-            <span className="text-zinc-400">résumés</span>
+            <span className="text-zinc-400">summaries</span>
           </div>
         ) : undefined
       }
@@ -585,7 +1173,7 @@ function TopArticlesCard({ state }: { state?: LiveRunState }) {
       ) : null}
 
       {!payload ? (
-        <div className="text-sm text-zinc-400">Pas encore de classement d’articles.</div>
+        <div className="text-sm text-zinc-400">No article ranking yet.</div>
       ) : (
         <>
           <div className="mb-3 flex flex-wrap gap-2 text-xs text-zinc-400">
@@ -613,7 +1201,7 @@ function TopArticlesCard({ state }: { state?: LiveRunState }) {
                       {articleSummary ? (
                         <p className="mt-2 text-sm leading-relaxed text-zinc-200">{articleSummary}</p>
                       ) : (
-                        <p className="mt-2 text-sm text-zinc-500">Résumé en attente...</p>
+                        <p className="mt-2 text-sm text-zinc-500">Summary pending...</p>
                       )}
                       {rationale ? <p className="mt-2 text-xs leading-relaxed text-zinc-400">{rationale}</p> : null}
                     </div>
@@ -631,16 +1219,16 @@ function TopArticlesCard({ state }: { state?: LiveRunState }) {
 function MarketSnapshotCard({ state }: { state?: LiveRunState }) {
   const rows = getMarketSnapshotPayload(state?.sections.marketSnapshot);
   return (
-    <Panel title="Market Snapshot" subtitle="Prix, variations et provider">
+    <Panel title="Market Snapshot" subtitle="Price, performance, and provider">
       {rows.length === 0 ? (
-        <div className="text-sm text-zinc-400">En attente des données marché.</div>
+        <div className="text-sm text-zinc-400">Waiting for market data.</div>
       ) : (
         <div className="overflow-auto rounded-xl border border-white/10">
           <table className="min-w-full text-left text-sm">
             <thead className="bg-white/5 text-xs uppercase tracking-[0.16em] text-zinc-400">
               <tr>
                 <th className="px-3 py-2">Instrument</th>
-                <th className="px-3 py-2">Prix</th>
+                <th className="px-3 py-2">Price</th>
                 <th className="px-3 py-2">24h</th>
                 <th className="px-3 py-2">7j</th>
                 <th className="px-3 py-2">Provider</th>
@@ -677,9 +1265,9 @@ function MarketSnapshotCard({ state }: { state?: LiveRunState }) {
 function MacroContextCard({ state }: { state?: LiveRunState }) {
   const rows = getMacroPayload(state?.sections.macroContext);
   return (
-    <Panel title="Macro Context" subtitle="Observations FRED / macro utilisées par le régime">
+    <Panel title="Macro Context" subtitle="FRED / macro observations used by the regime">
       {rows.length === 0 ? (
-        <div className="text-sm text-zinc-400">En attente du contexte macro.</div>
+        <div className="text-sm text-zinc-400">Waiting for macro context.</div>
       ) : (
         <div className="space-y-2">
           {rows.map((row, index) => (
@@ -702,6 +1290,262 @@ function MacroContextCard({ state }: { state?: LiveRunState }) {
   );
 }
 
+function EtfFlowsCard({ state }: { state?: LiveRunState }) {
+  const payload = getEtfFlowsPayload(state?.sections.etfFlows);
+  const datasets = payload?.snapshot?.datasets ?? [];
+
+  return (
+    <Panel title="ETF Flows" subtitle="Daily flow table with 5D/20D recap and top inflow/outflow leaders">
+      {!payload ? (
+        <div className="text-sm text-zinc-400">Waiting for ETF flow collection.</div>
+      ) : (
+        <>
+          <div className="mb-4 flex flex-wrap items-center gap-2 text-xs">
+            {typeof payload.available === "boolean" ? (
+              <span
+                className={cx(
+                  "data-pill border",
+                  payload.available
+                    ? "border-emerald-300/20 bg-emerald-400/10 text-emerald-100"
+                    : "border-amber-300/20 bg-amber-400/10 text-amber-100",
+                )}
+              >
+                {payload.available ? "available" : "unavailable"}
+              </span>
+            ) : null}
+            {payload.snapshot?.source ? <span className="data-pill">source: {payload.snapshot.source}</span> : null}
+            {payload.snapshot?.capturedAt ? (
+              <span className="data-pill">captured: {formatDateTime(payload.snapshot.capturedAt)}</span>
+            ) : null}
+            {payload.snapshot?.datasets ? (
+              <span className="data-pill">datasets: {payload.snapshot.datasets.length}</span>
+            ) : null}
+          </div>
+
+            {payload.error ? (
+            <div className="mb-4 rounded-xl border border-amber-300/15 bg-amber-400/10 px-3 py-2 text-sm text-amber-100">
+              Collection warning: {payload.error}
+            </div>
+          ) : null}
+
+          {datasets.length === 0 ? (
+            <div className="text-sm text-zinc-400">No ETF flow snapshot available for this run.</div>
+          ) : (
+            <div className="overflow-hidden rounded-2xl border border-white/10 bg-black/15">
+              {datasets.map((dataset, datasetIndex) => {
+                const latestRow = dataset.rows[dataset.rows.length - 1];
+                const latestTotal = latestRow ? getEtfRowTotalNetFlowUsdM(latestRow) : null;
+                const cumulative5d = computeRecentEtfCumulative(dataset, 5);
+                const cumulative20d = computeRecentEtfCumulative(dataset, 20);
+                const tickers =
+                  dataset.etfTickers.length > 0
+                    ? dataset.etfTickers
+                    : latestRow
+                      ? Object.keys(latestRow.byEtfNetFlowUsdM).sort()
+                      : [];
+                const latestEntries = latestRow
+                  ? tickers.map((ticker) => ({
+                      ticker,
+                      value:
+                        typeof latestRow.byEtfNetFlowUsdM[ticker] === "number" || latestRow.byEtfNetFlowUsdM[ticker] === null
+                          ? latestRow.byEtfNetFlowUsdM[ticker]
+                          : null,
+                    }))
+                  : [];
+                const positiveEntries = latestEntries.filter(
+                  (entry): entry is { ticker: string; value: number } => typeof entry.value === "number" && entry.value > 0,
+                );
+                const negativeEntries = latestEntries.filter(
+                  (entry): entry is { ticker: string; value: number } => typeof entry.value === "number" && entry.value < 0,
+                );
+                const topInflow = positiveEntries.reduce<{ ticker: string; value: number } | undefined>(
+                  (best, entry) => (!best || entry.value > best.value ? entry : best),
+                  undefined,
+                );
+                const topOutflow = negativeEntries.reduce<{ ticker: string; value: number } | undefined>(
+                  (worst, entry) => (!worst || entry.value < worst.value ? entry : worst),
+                  undefined,
+                );
+                const sortedLatestEntries = [...latestEntries].sort((a, b) => {
+                  const aValue = typeof a.value === "number" ? Math.abs(a.value) : -1;
+                  const bValue = typeof b.value === "number" ? Math.abs(b.value) : -1;
+                  return bValue - aValue;
+                });
+
+                return (
+                  <section
+                    key={`${dataset.asset ?? "dataset"}-${datasetIndex}`}
+                    className={cx("px-4 py-4", datasetIndex > 0 && "border-t border-white/10")}
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <div className="text-sm font-semibold tracking-wide text-zinc-100">
+                          {formatEtfAssetLabel(dataset.asset)}
+                        </div>
+                        <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-zinc-400">
+                          {latestRow ? <span>Trading day: {latestRow.date}</span> : <span>No parsed rows</span>}
+                          {dataset.pageUrl ? (
+                            <a
+                              href={dataset.pageUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-cyan-200 hover:text-cyan-100"
+                            >
+                              source page
+                            </a>
+                          ) : null}
+                          {dataset.capturedAt ? <span>dataset capture: {formatDateTime(dataset.capturedAt)}</span> : null}
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap justify-end gap-2 text-xs text-zinc-400">
+                        {latestEntries.length > 0 ? <span>ETFs: {latestEntries.length}</span> : null}
+                        <span>
+                          Positive / Negative: {positiveEntries.length}/{negativeEntries.length}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="mt-3 overflow-hidden rounded-xl border border-white/10 bg-white/[0.02]">
+                      <div className="grid gap-px bg-white/10 sm:grid-cols-2 xl:grid-cols-5">
+                        <div className="bg-black/25 px-3 py-2.5">
+                          <div className="text-[11px] uppercase tracking-[0.16em] text-zinc-400">Net Flow Total</div>
+                          <div
+                            className={cx(
+                              "mt-1 text-sm font-semibold",
+                              typeof latestTotal === "number"
+                                ? latestTotal >= 0
+                                  ? "text-emerald-200"
+                                  : "text-rose-200"
+                                : "text-zinc-400",
+                            )}
+                          >
+                            {formatUsdMillions(latestTotal)}
+                          </div>
+                        </div>
+                        <div className="bg-black/25 px-3 py-2.5">
+                          <div className="text-[11px] uppercase tracking-[0.16em] text-zinc-400">Cumulative 5D</div>
+                          <div
+                            className={cx(
+                              "mt-1 text-sm font-semibold",
+                              typeof cumulative5d === "number"
+                                ? cumulative5d >= 0
+                                  ? "text-emerald-200"
+                                  : "text-rose-200"
+                                : "text-zinc-400",
+                            )}
+                          >
+                            {formatUsdMillions(cumulative5d)}
+                          </div>
+                        </div>
+                        <div className="bg-black/25 px-3 py-2.5">
+                          <div className="text-[11px] uppercase tracking-[0.16em] text-zinc-400">Cumulative 20D</div>
+                          <div
+                            className={cx(
+                              "mt-1 text-sm font-semibold",
+                              typeof cumulative20d === "number"
+                                ? cumulative20d >= 0
+                                  ? "text-emerald-200"
+                                  : "text-rose-200"
+                                : "text-zinc-400",
+                            )}
+                          >
+                            {formatUsdMillions(cumulative20d)}
+                          </div>
+                        </div>
+                        <div className="bg-black/25 px-3 py-2.5">
+                          <div className="text-[11px] uppercase tracking-[0.16em] text-zinc-400">Top Inflow</div>
+                          <div className="mt-1 text-sm font-semibold text-zinc-100">
+                            {topInflow ? `${topInflow.ticker} · ${formatUsdMillions(topInflow.value)}` : "N/A"}
+                          </div>
+                        </div>
+                        <div className="bg-black/25 px-3 py-2.5">
+                          <div className="text-[11px] uppercase tracking-[0.16em] text-zinc-400">Top Outflow</div>
+                          <div className="mt-1 text-sm font-semibold text-zinc-100">
+                            {topOutflow ? `${topOutflow.ticker} · ${formatUsdMillions(topOutflow.value)}` : "N/A"}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {latestRow ? (
+                      <div className="mt-3 overflow-auto rounded-xl border border-white/10 bg-black/10">
+                        <table className="min-w-full text-left text-sm">
+                          <thead className="bg-white/5 text-xs uppercase tracking-[0.16em] text-zinc-400">
+                            <tr>
+                              <th className="px-3 py-2">ETF</th>
+                              <th className="px-3 py-2">Day Flow (US$m)</th>
+                              <th className="px-3 py-2">Direction</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {sortedLatestEntries.map((entry) => {
+                              const direction = etfFlowDirection(entry.value);
+                              const isPositive = typeof entry.value === "number" && entry.value > 0;
+                              const isNegative = typeof entry.value === "number" && entry.value < 0;
+                              return (
+                                <tr key={entry.ticker} className="border-t border-white/5">
+                                  <td className="px-3 py-2.5 font-medium text-zinc-200">{entry.ticker}</td>
+                                  <td
+                                    className={cx(
+                                      "px-3 py-2.5 font-mono",
+                                      isPositive ? "text-emerald-200" : isNegative ? "text-rose-200" : "text-zinc-300",
+                                    )}
+                                  >
+                                    {typeof entry.value === "number" ? entry.value.toFixed(1) : "N/A"}
+                                  </td>
+                                  <td
+                                    className={cx(
+                                      "px-3 py-2.5 capitalize",
+                                      isPositive ? "text-emerald-200" : isNegative ? "text-rose-200" : "text-zinc-400",
+                                    )}
+                                  >
+                                    {direction}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                            <tr className="border-t border-white/10 bg-white/[0.02]">
+                              <td className="px-3 py-2.5 font-semibold text-zinc-100">Total</td>
+                              <td
+                                className={cx(
+                                  "px-3 py-2.5 font-mono font-semibold",
+                                  typeof latestTotal === "number"
+                                    ? latestTotal >= 0
+                                      ? "text-emerald-200"
+                                      : "text-rose-200"
+                                    : "text-zinc-300",
+                                )}
+                              >
+                                {typeof latestTotal === "number" ? latestTotal.toFixed(1) : "N/A"}
+                              </td>
+                              <td
+                                className={cx(
+                                  "px-3 py-2.5 capitalize",
+                                  typeof latestTotal === "number"
+                                    ? latestTotal >= 0
+                                      ? "text-emerald-200"
+                                      : "text-rose-200"
+                                    : "text-zinc-400",
+                                )}
+                              >
+                                {etfFlowDirection(latestTotal)}
+                              </td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : null}
+                  </section>
+                );
+              })}
+            </div>
+          )}
+        </>
+      )}
+    </Panel>
+  );
+}
+
 function JsonSectionCard({
   title,
   subtitle,
@@ -716,7 +1560,7 @@ function JsonSectionCard({
   return (
     <Panel title={title} subtitle={subtitle}>
       {payload === undefined ? (
-        <div className="text-sm text-zinc-400">En attente...</div>
+        <div className="text-sm text-zinc-400">Pending...</div>
       ) : (
         <pre className={cx("overflow-auto rounded-xl border border-white/10 bg-black/20 p-3 text-xs text-zinc-300", maxHeight)}>
           {prettyJson(payload)}
@@ -742,7 +1586,7 @@ function RunListPanel({
   return (
     <Panel
       title="Runs"
-      subtitle="Historique via run-log (CLI + Web)"
+      subtitle="History from run-log (CLI + Web)"
       actions={
         <button
           type="button"
@@ -756,7 +1600,7 @@ function RunListPanel({
     >
       <div className="space-y-2 lg:max-h-[calc(100vh-31rem)] lg:overflow-auto lg:pr-1">
         {runs.length === 0 ? (
-          <div className="text-sm text-zinc-400">Aucun run trouvé.</div>
+          <div className="text-sm text-zinc-400">No runs found.</div>
         ) : (
           runs.map((run) => (
             <button
@@ -807,7 +1651,7 @@ function ControlsPanel({
   return (
     <Panel
       title="Control Surface"
-      subtitle="Lancer un run et suivre la propagation des sections en live"
+      subtitle="Start a run and follow section updates live"
       actions={<ConnectionBadge status={connectionState} />}
     >
       <form
@@ -868,7 +1712,7 @@ function ControlsPanel({
             <span className="pointer-events-none absolute inset-0 opacity-40 [mask-image:linear-gradient(to_right,transparent,black,transparent)] animate-sweep bg-gradient-to-r from-transparent via-white to-transparent" />
           ) : null}
           <span className="relative">
-            {starting ? "Démarrage..." : launchDisabled ? "Run en cours..." : "Lancer un run"}
+            {starting ? "Starting..." : launchDisabled ? "Run in progress..." : "Start run"}
           </span>
         </button>
       </form>
@@ -878,7 +1722,7 @@ function ControlsPanel({
         </p>
       ) : null}
       <p className="mt-3 text-xs leading-relaxed text-zinc-400">
-        API cible: <span className="font-mono text-zinc-300">{API_BASE}</span>
+        API target: <span className="font-mono text-zinc-300">{API_BASE}</span>
       </p>
     </Panel>
   );
@@ -952,7 +1796,7 @@ export default function App() {
           if (activeRunId) {
             setSelectedRunId(activeRunId);
           }
-          throw new Error("Un run est déjà en cours. Attends sa fin avant d’en lancer un autre.");
+          throw new Error("A run is already in progress. Wait for it to finish before starting another one.");
         }
         const fallback = isRecord(payload) && typeof payload.error === "string" ? payload.error : undefined;
         throw new Error(fallback ?? `HTTP ${response.status}`);
@@ -1035,7 +1879,7 @@ export default function App() {
   const hasRunningRun = activeRunIds.length > 0 || liveRunState?.status === "running";
   const launchDisabled = Boolean(hasRunningRun);
   const launchDisabledReason = launchDisabled
-    ? `Un run est déjà en cours${activeBlockingRunId ? ` (${activeBlockingRunId})` : ""}. Le lancement simultané est bloqué pour éviter les conflits de données / UI.`
+    ? `A run is already in progress${activeBlockingRunId ? ` (${activeBlockingRunId})` : ""}. Concurrent launches are blocked to avoid data / UI conflicts.`
     : undefined;
 
   return (
@@ -1050,7 +1894,7 @@ export default function App() {
                 Live Review Control Surface
               </h1>
               <p className="mt-2 max-w-3xl text-sm leading-relaxed text-zinc-300">
-                Vue temps réel des étapes du pipeline, sections du rapport et erreurs non fatales, avec replay automatique via JSONL pour supporter le refresh.
+                Real-time view of pipeline stages, report sections, and non-fatal errors, with automatic JSONL replay to support refresh.
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -1101,7 +1945,7 @@ export default function App() {
                       ) : null}
                     </div>
                     <div className="font-mono text-xs text-zinc-400">
-                      {selectedRunId ? `runId: ${selectedRunId}` : "Aucun run sélectionné"}
+                      {selectedRunId ? `runId: ${selectedRunId}` : "No run selected"}
                     </div>
                     {liveRunState?.completion?.reportFilePath ? (
                       <div className="mt-2 text-xs text-zinc-400">report: {liveRunState.completion.reportFilePath}</div>
@@ -1119,22 +1963,28 @@ export default function App() {
                   <div className="mb-3 text-xs uppercase tracking-[0.18em] text-zinc-400">Section Readiness</div>
                   <div className="flex flex-wrap gap-2">
                     {SECTION_READINESS_ITEMS.map(({ key, label }) => {
-                      const ready = liveRunState?.sections[key] !== undefined;
+                      const readiness = getSectionReadinessState(liveRunState, key);
                       return (
                         <div
                           key={key}
                           className={cx(
                             "inline-flex min-w-0 items-center gap-2 rounded-lg border px-2.5 py-1.5 text-xs",
-                            ready
+                            readiness === "ready"
                               ? "border-cyan-300/20 bg-cyan-400/10 text-cyan-100"
-                              : "border-white/10 bg-white/[0.02] text-zinc-500",
+                              : readiness === "running"
+                                ? "border-amber-300/20 bg-amber-400/10 text-amber-100"
+                                : "border-white/10 bg-white/[0.02] text-zinc-500",
                           )}
-                          title={`${label} · ${ready ? "ready" : "standby"}`}
+                          title={`${label} · ${readiness}`}
                         >
                           <span
                             className={cx(
                               "h-1.5 w-1.5 shrink-0 rounded-full",
-                              ready ? "bg-cyan-300 shadow-[0_0_8px_rgba(34,211,238,0.6)]" : "bg-zinc-600",
+                              readiness === "ready"
+                                ? "bg-cyan-300 shadow-[0_0_8px_rgba(34,211,238,0.6)]"
+                                : readiness === "running"
+                                  ? "bg-amber-300 shadow-[0_0_8px_rgba(251,191,36,0.55)]"
+                                  : "bg-zinc-600",
                             )}
                           />
                           <span className="max-w-[12rem] truncate">{label}</span>
@@ -1151,63 +2001,34 @@ export default function App() {
             {activeView === "overview" ? (
               <div className="grid items-start gap-4 2xl:grid-cols-[minmax(0,1.28fr)_minmax(0,0.72fr)]">
                 <div className="min-w-0 space-y-4">
-                  <TopArticlesCard state={liveRunState} />
-                  <div className="grid gap-4 xl:grid-cols-2">
-                    <JsonSectionCard
-                      title="Regime"
-                      subtitle="Vue synthétique du régime"
-                      payload={liveRunState?.sections.regime}
-                      maxHeight="max-h-52"
-                    />
-                    <JsonSectionCard
-                      title="Sentiment"
-                      subtitle="Score / cohérence / narration"
-                      payload={liveRunState?.sections.sentiment}
-                      maxHeight="max-h-52"
-                    />
-                    <JsonSectionCard
-                      title="Outlook"
-                      subtitle="Distribution bull/base/bear"
-                      payload={liveRunState?.sections.outlook}
-                      maxHeight="max-h-52"
-                    />
-                    <JsonSectionCard
-                      title="Positioning"
-                      subtitle="Guidance exécution / exposition"
-                      payload={liveRunState?.sections.positionWording}
-                      maxHeight="max-h-52"
-                    />
+                  <div className="grid items-start gap-4 xl:grid-cols-2">
+                    <RegimeSummaryCard state={liveRunState} />
+                    <SentimentSummaryCard state={liveRunState} />
                   </div>
+                  <OutlookSummaryCard state={liveRunState} />
+                  <PositioningSummaryCard state={liveRunState} />
                 </div>
                 <div className="min-w-0 space-y-4">
                   <ActivityOverviewCard state={liveRunState} connectionState={connectionState} />
+                  <RiskInvalidationSummaryCard state={liveRunState} />
                   <JsonSectionCard
-                    title="Risk Invalidation"
-                    subtitle="Seuils / conditions à surveiller"
-                    payload={liveRunState?.sections.riskInvalidation}
+                    title="Diagnostics"
+                    subtitle="Technical metadata (summary)"
+                    payload={liveRunState?.sections.diagnostics}
                     maxHeight="max-h-64"
                   />
-                  <TimelineCard state={liveRunState} compact />
                 </div>
               </div>
             ) : null}
 
-            {activeView === "analysis" ? (
-              <div className="grid items-start gap-4 xl:grid-cols-2">
-                <JsonSectionCard title="Regime" subtitle="Sortie du détecteur de régime" payload={liveRunState?.sections.regime} />
-                <JsonSectionCard title="Sentiment" subtitle="Évaluation sentiment / cohérence prix" payload={liveRunState?.sections.sentiment} />
-                <JsonSectionCard title="Outlook" subtitle="Distribution bull/base/bear" payload={liveRunState?.sections.outlook} />
-                <JsonSectionCard title="Positioning" subtitle="Guidance de positionnement" payload={liveRunState?.sections.positionWording} />
-                <JsonSectionCard
-                  title="Risk Invalidation"
-                  subtitle="Conditions d’invalidation et seuils"
-                  payload={liveRunState?.sections.riskInvalidation}
-                />
-                <JsonSectionCard
-                  title="Diagnostics"
-                  subtitle="Métadonnées techniques de génération"
-                  payload={liveRunState?.sections.diagnostics}
-                />
+            {activeView === "news" ? (
+              <div className="grid items-start gap-4 2xl:grid-cols-[minmax(0,1.25fr)_minmax(0,0.75fr)]">
+                <div className="min-w-0">
+                  <TopArticlesCard state={liveRunState} />
+                </div>
+                <div className="min-w-0 space-y-4">
+                  <JsonSectionCard title="News Intake" subtitle="RSS ingestion summary" payload={liveRunState?.sections.news} />
+                </div>
               </div>
             ) : null}
 
@@ -1217,14 +2038,7 @@ export default function App() {
                   <MarketSnapshotCard state={liveRunState} />
                   <MacroContextCard state={liveRunState} />
                 </div>
-                <div className="grid items-start gap-4 xl:grid-cols-2">
-                  <JsonSectionCard title="News Intake" subtitle="Résumé de l’ingestion RSS" payload={liveRunState?.sections.news} />
-                  <JsonSectionCard title="Config Snapshot" subtitle="Feeds, watchlist, skills, LLM" payload={liveRunState?.sections.config} />
-                </div>
-                <div className="grid items-start gap-4 xl:grid-cols-2">
-                  <JsonSectionCard title="ETF Flows" subtitle="Snapshot Farside / état de collecte" payload={liveRunState?.sections.etfFlows} />
-                  <JsonSectionCard title="Diagnostics" subtitle="Métadonnées techniques de génération" payload={liveRunState?.sections.diagnostics} />
-                </div>
+                <EtfFlowsCard state={liveRunState} />
               </>
             ) : null}
 
@@ -1237,20 +2051,21 @@ export default function App() {
 
             {activeView === "report" ? (
               <>
-                <Panel title="Report Markdown" subtitle="Markdown final (rejoué depuis le stream JSONL si disponible)">
+                <Panel title="Report Markdown" subtitle="Final markdown (replayed from JSONL stream when available)">
                   {reportMarkdown ? (
                     <pre className="max-h-[70vh] overflow-auto rounded-xl border border-white/10 bg-black/30 p-4 text-xs leading-relaxed text-zinc-200">
                       {reportMarkdown}
                     </pre>
                   ) : (
                     <div className="text-sm text-zinc-400">
-                      Le markdown final n’est pas encore disponible dans le flux (ou ce run a été lancé hors serveur web/SSE).
+                      Final markdown is not available in the stream yet (or this run was started outside the web/SSE server).
                     </div>
                   )}
                 </Panel>
-                <div className="grid items-start gap-4 xl:grid-cols-2">
-                  <JsonSectionCard title="Report Payload" subtitle="Métadonnées + chemin fichier (si disponible)" payload={liveRunState?.sections.report} />
-                  <JsonSectionCard title="Diagnostics" subtitle="Contexte technique du rendu" payload={liveRunState?.sections.diagnostics} />
+                <div className="grid items-start gap-4 xl:grid-cols-2 2xl:grid-cols-3">
+                  <JsonSectionCard title="Report Payload" subtitle="Metadata + file path (if available)" payload={liveRunState?.sections.report} />
+                  <JsonSectionCard title="Config Snapshot" subtitle="Feeds, watchlist, skills, LLM" payload={liveRunState?.sections.config} />
+                  <JsonSectionCard title="Diagnostics" subtitle="Rendering technical context" payload={liveRunState?.sections.diagnostics} />
                 </div>
               </>
             ) : null}

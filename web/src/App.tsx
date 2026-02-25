@@ -14,6 +14,7 @@ const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "h
 type ConnectionState = "idle" | "connecting" | "reconnecting" | "live" | "closed" | "error";
 type StageRunStatus = "running" | "completed";
 type LiveRunTerminalStatus = "idle" | "running" | "completed" | "failed" | "skipped_duplicate";
+type DashboardViewKey = "overview" | "analysis" | "data" | "ops" | "report";
 
 interface LiveLogLine {
   at: string;
@@ -70,6 +71,14 @@ const SECTION_READINESS_ITEMS: Array<{ key: RunReviewSectionKey; label: string }
   { key: "positionWording", label: "Positioning" },
   { key: "diagnostics", label: "Diagnostics" },
   { key: "report", label: "Report" },
+];
+
+const DASHBOARD_VIEWS: Array<{ key: DashboardViewKey; label: string; hint: string }> = [
+  { key: "overview", label: "Overview", hint: "Essentiel live" },
+  { key: "analysis", label: "Analysis", hint: "Signal / biais / invalidation" },
+  { key: "data", label: "Data", hint: "Marché / macro / ingestion" },
+  { key: "ops", label: "Ops", hint: "Timeline + logs" },
+  { key: "report", label: "Report", hint: "Markdown final" },
 ];
 
 function cx(...values: Array<string | false | null | undefined>): string {
@@ -328,20 +337,167 @@ function Panel({
   );
 }
 
-function TimelineCard({ state }: { state?: LiveRunState }) {
+function ViewTabs({
+  value,
+  onChange,
+}: {
+  value: DashboardViewKey;
+  onChange: (next: DashboardViewKey) => void;
+}) {
+  return (
+    <div className="panel">
+      <div className="panel-body">
+        <div className="flex flex-wrap gap-2">
+          {DASHBOARD_VIEWS.map((view) => {
+            const active = value === view.key;
+            return (
+              <button
+                key={view.key}
+                type="button"
+                onClick={() => onChange(view.key)}
+                className={cx(
+                  "rounded-xl border px-3 py-2 text-left transition",
+                  active
+                    ? "border-cyan-300/25 bg-cyan-400/10 text-cyan-100 shadow-glow"
+                    : "border-white/10 bg-white/[0.02] text-zinc-300 hover:bg-white/[0.05]",
+                )}
+              >
+                <div className="text-xs font-medium uppercase tracking-[0.16em]">{view.label}</div>
+                <div className="mt-1 text-[11px] text-zinc-400">{view.hint}</div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function getOrderedStages(state?: LiveRunState): StageState[] {
+  if (!state) {
+    return [];
+  }
+  return state.stagesOrder.map((stageKey) => state.stages[stageKey]).filter(Boolean) as StageState[];
+}
+
+function ActivityOverviewCard({
+  state,
+  connectionState,
+}: {
+  state?: LiveRunState;
+  connectionState: ConnectionState;
+}) {
+  if (!state) {
+    return (
+      <Panel title="Live Activity" subtitle="Résumé du flux temps réel">
+        <div className="text-sm text-zinc-400">Sélectionne un run pour voir l’activité.</div>
+      </Panel>
+    );
+  }
+
+  const orderedStages = getOrderedStages(state);
+  const runningStage = [...orderedStages].reverse().find((stage) => stage.status === "running");
+  const latestStage = orderedStages.length > 0 ? orderedStages[orderedStages.length - 1] : undefined;
+  const lastIssue = [...state.logs].reverse().find((line) => line.level === "error" || line.level === "warn");
+  const recentLogs = state.logs.slice(-6).reverse();
+  const completedStages = orderedStages.filter((stage) => stage.status === "completed").length;
+  const totalStages = orderedStages.length;
+
+  const metricCards = [
+    {
+      label: "Connection",
+      value: connectionState,
+      tone:
+        connectionState === "live"
+          ? "border-emerald-300/20 bg-emerald-400/10 text-emerald-100"
+          : connectionState === "reconnecting" || connectionState === "connecting"
+            ? "border-cyan-300/20 bg-cyan-400/10 text-cyan-100"
+            : "border-white/10 bg-white/[0.02] text-zinc-300",
+    },
+    {
+      label: "Current Stage",
+      value: runningStage?.label ?? latestStage?.label ?? "Waiting",
+      tone: "border-white/10 bg-white/[0.02] text-zinc-100",
+    },
+    {
+      label: "Pipeline",
+      value: totalStages > 0 ? `${completedStages}/${totalStages} completed` : "No stage yet",
+      tone: "border-white/10 bg-white/[0.02] text-zinc-100",
+    },
+    {
+      label: "Top Articles",
+      value:
+        state.topArticleProgress && state.topArticleProgress.total > 0
+          ? `${state.topArticleProgress.completed}/${state.topArticleProgress.total} summaries`
+          : "Pending",
+      tone:
+        state.topArticleProgress && state.topArticleProgress.total > 0
+          ? "border-cyan-300/20 bg-cyan-400/10 text-cyan-100"
+          : "border-white/10 bg-white/[0.02] text-zinc-400",
+    },
+  ] as const;
+
+  return (
+    <Panel title="Live Activity" subtitle="Cartes compactes pour suivre le run sans grand panneau vide">
+      <div className="grid gap-2 sm:grid-cols-2">
+        {metricCards.map((card) => (
+          <div key={card.label} className={cx("rounded-xl border px-3 py-2.5", card.tone)}>
+            <div className="text-[11px] uppercase tracking-[0.16em] text-zinc-400">{card.label}</div>
+            <div className="mt-1 text-sm font-medium">{card.value}</div>
+          </div>
+        ))}
+      </div>
+
+      {lastIssue ? (
+        <div className="mt-3 rounded-xl border border-amber-300/15 bg-amber-400/10 px-3 py-2">
+          <div className="text-[11px] uppercase tracking-[0.16em] text-amber-200">Latest Warning/Error</div>
+          <div className={cx("mt-1 text-sm", levelTone(lastIssue.level))}>{lastIssue.message}</div>
+        </div>
+      ) : null}
+
+      <div className="mt-3 rounded-xl border border-white/10 bg-black/20 p-3">
+        <div className="mb-2 text-[11px] uppercase tracking-[0.16em] text-zinc-400">Recent Events</div>
+        {recentLogs.length === 0 ? (
+          <div className="text-sm text-zinc-500">Pas encore de logs notables.</div>
+        ) : (
+          <div className="space-y-2">
+            {recentLogs.map((line, index) => (
+              <div key={`${line.at}-${index}`} className="grid grid-cols-[56px_40px_1fr] gap-2 text-xs">
+                <span className="text-zinc-500">{new Date(line.at).toLocaleTimeString("fr-FR")}</span>
+                <span className={cx("uppercase tracking-wide", levelTone(line.level))}>{line.level}</span>
+                <span className="text-zinc-300">{line.message}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </Panel>
+  );
+}
+
+function TimelineCard({
+  state,
+  compact = false,
+}: {
+  state?: LiveRunState;
+  compact?: boolean;
+}) {
   if (!state) {
     return <Panel title="Pipeline Timeline">Sélectionne un run pour ouvrir le flux.</Panel>;
   }
 
-  const orderedStages = state.stagesOrder.map((stageKey) => state.stages[stageKey]).filter(Boolean) as StageState[];
+  const orderedStages = getOrderedStages(state);
   return (
     <Panel title="Pipeline Timeline" subtitle="Stages du pipeline, complétés au fil du streaming">
       {orderedStages.length === 0 ? (
         <div className="text-sm text-zinc-400">Aucun événement reçu pour ce run (pas encore démarré ou run historique CLI sans event log).</div>
       ) : (
-        <ol className="space-y-3">
+        <ol className={cx("space-y-3", compact && "max-h-[26rem] overflow-auto pr-1")}>
           {orderedStages.map((stage) => (
-            <li key={stage.stage} className="relative rounded-xl border border-white/10 bg-white/[0.02] p-3">
+            <li
+              key={stage.stage}
+              className={cx("relative rounded-xl border border-white/10 bg-white/[0.02] p-3", compact && "p-2.5")}
+            >
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
                   <span
@@ -372,13 +528,14 @@ function TimelineCard({ state }: { state?: LiveRunState }) {
 }
 
 function LogsCard({ state }: { state?: LiveRunState }) {
+  const rows = state?.logs ?? [];
   return (
     <Panel title="Live Logs" subtitle="Messages système et erreurs non fatales">
-      {!state || state.logs.length === 0 ? (
+      {rows.length === 0 ? (
         <div className="text-sm text-zinc-400">Pas de logs pour le moment.</div>
       ) : (
         <div className="max-h-72 space-y-2 overflow-auto rounded-xl border border-white/10 bg-black/20 p-3 font-mono text-xs">
-          {state.logs.map((line, index) => (
+          {rows.map((line, index) => (
             <div key={`${line.at}-${index}`} className="grid grid-cols-[88px_50px_1fr] gap-2">
               <span className="text-zinc-500">{new Date(line.at).toLocaleTimeString("fr-FR")}</span>
               <span className={cx("uppercase tracking-wide", levelTone(line.level))}>{line.level}</span>
@@ -595,9 +752,9 @@ function RunListPanel({
           {loading ? "Refresh..." : "Refresh"}
         </button>
       }
-      className="h-full"
+      className="h-full lg:max-h-[calc(100vh-24rem)]"
     >
-      <div className="space-y-2">
+      <div className="space-y-2 lg:max-h-[calc(100vh-31rem)] lg:overflow-auto lg:pr-1">
         {runs.length === 0 ? (
           <div className="text-sm text-zinc-400">Aucun run trouvé.</div>
         ) : (
@@ -734,6 +891,7 @@ export default function App() {
   const [selectedRunId, setSelectedRunId] = useState<string>();
   const [liveRunState, setLiveRunState] = useState<LiveRunState>();
   const [connectionState, setConnectionState] = useState<ConnectionState>("idle");
+  const [activeView, setActiveView] = useState<DashboardViewKey>("overview");
   const [startingRun, setStartingRun] = useState(false);
   const [uiError, setUiError] = useState<string>();
 
@@ -910,7 +1068,7 @@ export default function App() {
         ) : null}
 
         <div className="grid gap-4 lg:grid-cols-[minmax(0,340px)_minmax(0,1fr)]">
-          <aside className="min-w-0 space-y-4">
+          <aside className="min-w-0 space-y-4 lg:sticky lg:top-6 lg:self-start">
             <ControlsPanel
               onStartRun={startRun}
               starting={startingRun}
@@ -988,49 +1146,114 @@ export default function App() {
               </div>
             </section>
 
-            <div className="grid gap-4 xl:grid-cols-2">
-              <TimelineCard state={liveRunState} />
-              <LogsCard state={liveRunState} />
-            </div>
+            <ViewTabs value={activeView} onChange={setActiveView} />
 
-            <div className="grid items-start gap-4 2xl:grid-cols-[1.25fr_0.75fr]">
-              <div className="min-w-0 self-start">
-                <TopArticlesCard state={liveRunState} />
+            {activeView === "overview" ? (
+              <div className="grid items-start gap-4 2xl:grid-cols-[minmax(0,1.28fr)_minmax(0,0.72fr)]">
+                <div className="min-w-0 space-y-4">
+                  <TopArticlesCard state={liveRunState} />
+                  <div className="grid gap-4 xl:grid-cols-2">
+                    <JsonSectionCard
+                      title="Regime"
+                      subtitle="Vue synthétique du régime"
+                      payload={liveRunState?.sections.regime}
+                      maxHeight="max-h-52"
+                    />
+                    <JsonSectionCard
+                      title="Sentiment"
+                      subtitle="Score / cohérence / narration"
+                      payload={liveRunState?.sections.sentiment}
+                      maxHeight="max-h-52"
+                    />
+                    <JsonSectionCard
+                      title="Outlook"
+                      subtitle="Distribution bull/base/bear"
+                      payload={liveRunState?.sections.outlook}
+                      maxHeight="max-h-52"
+                    />
+                    <JsonSectionCard
+                      title="Positioning"
+                      subtitle="Guidance exécution / exposition"
+                      payload={liveRunState?.sections.positionWording}
+                      maxHeight="max-h-52"
+                    />
+                  </div>
+                </div>
+                <div className="min-w-0 space-y-4">
+                  <ActivityOverviewCard state={liveRunState} connectionState={connectionState} />
+                  <JsonSectionCard
+                    title="Risk Invalidation"
+                    subtitle="Seuils / conditions à surveiller"
+                    payload={liveRunState?.sections.riskInvalidation}
+                    maxHeight="max-h-64"
+                  />
+                  <TimelineCard state={liveRunState} compact />
+                </div>
               </div>
-              <div className="min-w-0 space-y-4 self-start">
+            ) : null}
+
+            {activeView === "analysis" ? (
+              <div className="grid items-start gap-4 xl:grid-cols-2">
                 <JsonSectionCard title="Regime" subtitle="Sortie du détecteur de régime" payload={liveRunState?.sections.regime} />
                 <JsonSectionCard title="Sentiment" subtitle="Évaluation sentiment / cohérence prix" payload={liveRunState?.sections.sentiment} />
                 <JsonSectionCard title="Outlook" subtitle="Distribution bull/base/bear" payload={liveRunState?.sections.outlook} />
                 <JsonSectionCard title="Positioning" subtitle="Guidance de positionnement" payload={liveRunState?.sections.positionWording} />
+                <JsonSectionCard
+                  title="Risk Invalidation"
+                  subtitle="Conditions d’invalidation et seuils"
+                  payload={liveRunState?.sections.riskInvalidation}
+                />
+                <JsonSectionCard
+                  title="Diagnostics"
+                  subtitle="Métadonnées techniques de génération"
+                  payload={liveRunState?.sections.diagnostics}
+                />
               </div>
-            </div>
+            ) : null}
 
-            <div className="grid gap-4 xl:grid-cols-2">
-              <MarketSnapshotCard state={liveRunState} />
-              <MacroContextCard state={liveRunState} />
-            </div>
-
-            <div className="grid gap-4 xl:grid-cols-2">
-              <JsonSectionCard title="Risk Invalidation" subtitle="Conditions d’invalidation et seuils" payload={liveRunState?.sections.riskInvalidation} />
-              <JsonSectionCard title="Diagnostics" subtitle="Métadonnées techniques de génération" payload={liveRunState?.sections.diagnostics} />
-            </div>
-
-            <div className="grid gap-4 xl:grid-cols-2">
-              <JsonSectionCard title="Config Snapshot" subtitle="Feeds, watchlist, skills, LLM" payload={liveRunState?.sections.config} />
-              <JsonSectionCard title="News Intake" subtitle="Résumé de l’ingestion RSS" payload={liveRunState?.sections.news} />
-            </div>
-
-            <Panel title="Report Markdown" subtitle="Markdown final (rejoué depuis le stream JSONL si disponible)">
-              {reportMarkdown ? (
-                <pre className="max-h-[480px] overflow-auto rounded-xl border border-white/10 bg-black/30 p-4 text-xs leading-relaxed text-zinc-200">
-                  {reportMarkdown}
-                </pre>
-              ) : (
-                <div className="text-sm text-zinc-400">
-                  Le markdown final n’est pas encore disponible dans le flux (ou ce run a été lancé hors serveur web/SSE).
+            {activeView === "data" ? (
+              <>
+                <div className="grid items-start gap-4 xl:grid-cols-2">
+                  <MarketSnapshotCard state={liveRunState} />
+                  <MacroContextCard state={liveRunState} />
                 </div>
-              )}
-            </Panel>
+                <div className="grid items-start gap-4 xl:grid-cols-2">
+                  <JsonSectionCard title="News Intake" subtitle="Résumé de l’ingestion RSS" payload={liveRunState?.sections.news} />
+                  <JsonSectionCard title="Config Snapshot" subtitle="Feeds, watchlist, skills, LLM" payload={liveRunState?.sections.config} />
+                </div>
+                <div className="grid items-start gap-4 xl:grid-cols-2">
+                  <JsonSectionCard title="ETF Flows" subtitle="Snapshot Farside / état de collecte" payload={liveRunState?.sections.etfFlows} />
+                  <JsonSectionCard title="Diagnostics" subtitle="Métadonnées techniques de génération" payload={liveRunState?.sections.diagnostics} />
+                </div>
+              </>
+            ) : null}
+
+            {activeView === "ops" ? (
+              <div className="grid items-start gap-4 xl:grid-cols-2">
+                <TimelineCard state={liveRunState} />
+                <LogsCard state={liveRunState} />
+              </div>
+            ) : null}
+
+            {activeView === "report" ? (
+              <>
+                <Panel title="Report Markdown" subtitle="Markdown final (rejoué depuis le stream JSONL si disponible)">
+                  {reportMarkdown ? (
+                    <pre className="max-h-[70vh] overflow-auto rounded-xl border border-white/10 bg-black/30 p-4 text-xs leading-relaxed text-zinc-200">
+                      {reportMarkdown}
+                    </pre>
+                  ) : (
+                    <div className="text-sm text-zinc-400">
+                      Le markdown final n’est pas encore disponible dans le flux (ou ce run a été lancé hors serveur web/SSE).
+                    </div>
+                  )}
+                </Panel>
+                <div className="grid items-start gap-4 xl:grid-cols-2">
+                  <JsonSectionCard title="Report Payload" subtitle="Métadonnées + chemin fichier (si disponible)" payload={liveRunState?.sections.report} />
+                  <JsonSectionCard title="Diagnostics" subtitle="Contexte technique du rendu" payload={liveRunState?.sections.diagnostics} />
+                </div>
+              </>
+            ) : null}
           </main>
         </div>
       </div>

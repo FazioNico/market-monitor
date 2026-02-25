@@ -405,6 +405,30 @@ function getMarketSnapshotPayload(value: unknown): Array<Record<string, unknown>
   return asArray(value).filter((item): item is Record<string, unknown> => isRecord(item));
 }
 
+const MACRO_COMMODITY_INSTRUMENT_IDS = new Set(["gold-usdc", "silver-usdc", "copper-usdc", "oil-usdc", "cl-usdc"]);
+
+function isMacroCommoditySnapshotRow(row: Record<string, unknown>): boolean {
+  const provider = asString(row.provider)?.toLowerCase() ?? "";
+  if (!provider.includes("hyperliquid")) {
+    return false;
+  }
+
+  const instrumentId = asString(row.instrumentId)?.toLowerCase() ?? "";
+  if (MACRO_COMMODITY_INSTRUMENT_IDS.has(instrumentId)) {
+    return true;
+  }
+
+  return /(gold|silver|copper)/.test(instrumentId) || /(^|[-_/])(cl|oil)([-_/]|$)/.test(instrumentId);
+}
+
+function isCryptoSnapshotRow(row: Record<string, unknown>): boolean {
+  const provider = asString(row.provider)?.toLowerCase() ?? "";
+  if (!(provider.includes("coingecko") || provider.includes("hyperliquid"))) {
+    return false;
+  }
+  return !isMacroCommoditySnapshotRow(row);
+}
+
 function getMacroPayload(value: unknown): Array<Record<string, unknown>> {
   return asArray(value).filter((item): item is Record<string, unknown> => isRecord(item));
 }
@@ -1185,6 +1209,8 @@ function TopArticlesCard({ state }: { state?: LiveRunState }) {
               const rank = typeof item.rank === "number" ? item.rank : index + 1;
               const title = typeof item.title === "string" ? item.title : "Untitled";
               const source = typeof item.source === "string" ? item.source : "source";
+              const articleLink =
+                typeof item.link === "string" && item.link.trim().length > 0 ? item.link.trim() : undefined;
               const articleSummary = typeof item.articleSummary === "string" ? item.articleSummary : undefined;
               const rationale = typeof item.rationale === "string" ? item.rationale : undefined;
               return (
@@ -1194,9 +1220,35 @@ function TopArticlesCard({ state }: { state?: LiveRunState }) {
                       {rank}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <h3 className="text-sm font-medium leading-snug text-zinc-100">{title}</h3>
+                      <h3 className="text-sm font-medium leading-snug text-zinc-100">
+                        {articleLink ? (
+                          <a
+                            href={articleLink}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="transition hover:text-cyan-100 hover:underline decoration-cyan-300/60 underline-offset-2"
+                          >
+                            {title}
+                          </a>
+                        ) : (
+                          title
+                        )}
+                      </h3>
                       <p className="mt-1 text-xs text-zinc-400">
                         {source} · {typeof item.publishedAt === "string" ? formatDateTime(item.publishedAt) : "n/a"}
+                        {articleLink ? (
+                          <>
+                            {" · "}
+                            <a
+                              href={articleLink}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-cyan-200 transition hover:text-cyan-100 hover:underline"
+                            >
+                              Open article
+                            </a>
+                          </>
+                        ) : null}
                       </p>
                       {articleSummary ? (
                         <p className="mt-2 text-sm leading-relaxed text-zinc-200">{articleSummary}</p>
@@ -1216,48 +1268,135 @@ function TopArticlesCard({ state }: { state?: LiveRunState }) {
   );
 }
 
-function MarketSnapshotCard({ state }: { state?: LiveRunState }) {
-  const rows = getMarketSnapshotPayload(state?.sections.marketSnapshot);
+function MarketSnapshotTable({
+  title,
+  subtitle,
+  rows,
+}: {
+  title: string;
+  subtitle?: string;
+  rows: Array<Record<string, unknown>>;
+}) {
+  if (rows.length === 0) {
+    return null;
+  }
+
   return (
-    <Panel title="Market Snapshot" subtitle="Price, performance, and provider">
-      {rows.length === 0 ? (
+    <div className="overflow-hidden rounded-xl border border-white/10">
+      <div className="overflow-auto">
+        <table className="min-w-full text-left text-sm">
+          <thead className="bg-white/5 text-xs uppercase tracking-[0.16em] text-zinc-400">
+            <tr>
+              <th className="px-3 py-2">Ticker</th>
+              <th className="px-3 py-2">Price</th>
+              <th className="px-3 py-2">24h</th>
+              <th className="px-3 py-2">7d</th>
+              <th className="px-3 py-2">Provider</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row, index) => {
+              const ret24h = typeof row.return24hPct === "number" ? row.return24hPct : undefined;
+              const ret7d = typeof row.return7dPct === "number" ? row.return7dPct : undefined;
+              return (
+                <tr key={`${String(row.instrumentId ?? index)}-${index}`} className="border-t border-white/5">
+                  <td className="px-3 py-2.5 text-zinc-200">{String(row.instrumentId ?? "n/a")}</td>
+                  <td className="px-3 py-2.5 text-zinc-200">
+                    {typeof row.currentPrice === "number" ? row.currentPrice.toLocaleString() : "n/a"}
+                  </td>
+                  <td
+                    className={cx(
+                      "px-3 py-2.5",
+                      ret24h === undefined ? "text-zinc-400" : ret24h >= 0 ? "text-emerald-300" : "text-rose-300",
+                    )}
+                  >
+                    {ret24h !== undefined ? `${ret24h.toFixed(2)}%` : "n/a"}
+                  </td>
+                  <td
+                    className={cx(
+                      "px-3 py-2.5",
+                      ret7d === undefined ? "text-zinc-400" : ret7d >= 0 ? "text-emerald-300" : "text-rose-300",
+                    )}
+                  >
+                    {ret7d !== undefined ? `${ret7d.toFixed(2)}%` : "n/a"}
+                  </td>
+                  <td className="px-3 py-2.5 text-zinc-400">{String(row.provider ?? "n/a")}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function splitMarketSnapshotRows(state?: LiveRunState): {
+  all: Array<Record<string, unknown>>;
+  crypto: Array<Record<string, unknown>>;
+  commodities: Array<Record<string, unknown>>;
+  other: Array<Record<string, unknown>>;
+} {
+  const rows = getMarketSnapshotPayload(state?.sections.marketSnapshot);
+  const commodityRows = rows.filter(isMacroCommoditySnapshotRow);
+  const cryptoRows = rows.filter(isCryptoSnapshotRow);
+  const otherRows = rows.filter((row) => !isMacroCommoditySnapshotRow(row) && !isCryptoSnapshotRow(row));
+
+  return {
+    all: rows,
+    crypto: cryptoRows,
+    commodities: commodityRows,
+    other: otherRows,
+  };
+}
+
+function CryptoSnapshotCard({ state }: { state?: LiveRunState }) {
+  const { all, crypto } = splitMarketSnapshotRows(state);
+  return (
+    <Panel title="Crypto Snapshot" subtitle="CoinGecko + Hyperliquid">
+      {all.length === 0 ? (
         <div className="text-sm text-zinc-400">Waiting for market data.</div>
+      ) : crypto.length === 0 ? (
+        <div className="text-sm text-zinc-400">No crypto market rows available for this run.</div>
       ) : (
-        <div className="overflow-auto rounded-xl border border-white/10">
-          <table className="min-w-full text-left text-sm">
-            <thead className="bg-white/5 text-xs uppercase tracking-[0.16em] text-zinc-400">
-              <tr>
-                <th className="px-3 py-2">Instrument</th>
-                <th className="px-3 py-2">Price</th>
-                <th className="px-3 py-2">24h</th>
-                <th className="px-3 py-2">7j</th>
-                <th className="px-3 py-2">Provider</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.slice(0, 20).map((row, index) => {
-                const ret24h = typeof row.return24hPct === "number" ? row.return24hPct : undefined;
-                const ret7d = typeof row.return7dPct === "number" ? row.return7dPct : undefined;
-                return (
-                  <tr key={`${String(row.instrumentId ?? index)}-${index}`} className="border-t border-white/5">
-                    <td className="px-3 py-2 text-zinc-200">{String(row.instrumentId ?? "n/a")}</td>
-                    <td className="px-3 py-2 text-zinc-200">
-                      {typeof row.currentPrice === "number" ? row.currentPrice.toLocaleString() : "n/a"}
-                    </td>
-                    <td className={cx("px-3 py-2", ret24h !== undefined && ret24h >= 0 ? "text-emerald-300" : "text-rose-300")}>
-                      {ret24h !== undefined ? `${ret24h.toFixed(2)}%` : "n/a"}
-                    </td>
-                    <td className={cx("px-3 py-2", ret7d !== undefined && ret7d >= 0 ? "text-emerald-300" : "text-rose-300")}>
-                      {ret7d !== undefined ? `${ret7d.toFixed(2)}%` : "n/a"}
-                    </td>
-                    <td className="px-3 py-2 text-zinc-400">{String(row.provider ?? "n/a")}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        <>
+          <MarketSnapshotTable
+            title="Crypto"
+            subtitle="CoinGecko + Hyperliquid (non-commodity instruments)"
+            rows={crypto}
+          />
+        </>
       )}
+    </Panel>
+  );
+}
+
+function CommoditiesSnapshotCard({ state }: { state?: LiveRunState }) {
+  const { all, commodities } = splitMarketSnapshotRows(state);
+  return (
+    <Panel title="Commodities Snapshot" subtitle="Hyperliquid macro commodity instruments">
+      {all.length === 0 ? (
+        <div className="text-sm text-zinc-400">Waiting for market data.</div>
+      ) : commodities.length === 0 ? (
+        <div className="text-sm text-zinc-400">No commodity rows available for this run.</div>
+      ) : (
+        <>
+          <MarketSnapshotTable title="Commodities" subtitle="Macro commodity instruments" rows={commodities} />
+        </>
+      )}
+    </Panel>
+  );
+}
+
+function OtherMarketSnapshotCard({ state }: { state?: LiveRunState }) {
+  const { all, other } = splitMarketSnapshotRows(state);
+  if (all.length === 0 || other.length === 0) {
+    return null;
+  }
+
+  return (
+    <Panel title="Other Market Rows" subtitle="Unclassified snapshot rows kept for visibility">
+      <MarketSnapshotTable title="Other Instruments" rows={other} />
     </Panel>
   );
 }
@@ -1891,10 +2030,10 @@ export default function App() {
             <div>
               <div className="font-display text-xs uppercase tracking-[0.28em] text-cyan-200/80">Market Monitor</div>
               <h1 className="mt-1 font-display text-2xl font-bold tracking-tight text-white sm:text-3xl">
-                Live Review Control Surface
+                Briefing Desk
               </h1>
               <p className="mt-2 max-w-3xl text-sm leading-relaxed text-zinc-300">
-                Real-time view of pipeline stages, report sections, and non-fatal errors, with automatic JSONL replay to support refresh.
+                Consolidated macro, news, and price-action signals with a clear directional view and risk guidance.
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -2035,9 +2174,11 @@ export default function App() {
             {activeView === "data" ? (
               <>
                 <div className="grid items-start gap-4 xl:grid-cols-2">
-                  <MarketSnapshotCard state={liveRunState} />
-                  <MacroContextCard state={liveRunState} />
+                  <CryptoSnapshotCard state={liveRunState} />
+                  <CommoditiesSnapshotCard state={liveRunState} />
                 </div>
+                <OtherMarketSnapshotCard state={liveRunState} />
+                <MacroContextCard state={liveRunState} />
                 <EtfFlowsCard state={liveRunState} />
               </>
             ) : null}

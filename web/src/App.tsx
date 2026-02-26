@@ -13,6 +13,9 @@ import type {
 const API_BASE =
   (import.meta.env.VITE_API_BASE_URL as string | undefined) ??
   "http://localhost:3001";
+const GITHUB_OWNER = "FazioNico";
+const GITHUB_REPO = "market-monitor";
+const GITHUB_DEFAULT_BRANCH = "main";
 
 type ConnectionState =
   | "idle"
@@ -323,6 +326,61 @@ function formatDurationMs(ms?: number): string {
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
   return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
+
+function SoftwareVersionPill({
+  version,
+  fallbackSha,
+}: {
+  version: string;
+  fallbackSha?: string;
+}) {
+  const [commitSha, setCommitSha] = useState<string | undefined>(fallbackSha);
+
+  useEffect(() => {
+    let cancelled = false;
+    const controller = new AbortController();
+
+    async function loadLatestCommitSha(): Promise<void> {
+      try {
+        const response = await fetch(
+          `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/commits/${GITHUB_DEFAULT_BRANCH}`,
+          {
+            signal: controller.signal,
+            headers: {
+              accept: "application/vnd.github+json",
+            },
+          },
+        );
+        if (!response.ok) {
+          return;
+        }
+        const payload = (await response.json()) as { sha?: string };
+        const shortSha =
+          typeof payload.sha === "string" && payload.sha.length >= 7
+            ? payload.sha.slice(0, 7)
+            : undefined;
+        if (!cancelled && shortSha) {
+          setCommitSha(shortSha);
+        }
+      } catch {
+        // Keep fallback SHA when GitHub API is unavailable or rate-limited.
+      }
+    }
+
+    void loadLatestCommitSha();
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [fallbackSha]);
+
+  return (
+    <div className="data-pill">
+      Software Version: v{version}
+      {commitSha ? ` - ${commitSha}` : ""}
+    </div>
+  );
 }
 
 function statusTone(status: string): string {
@@ -2715,8 +2773,8 @@ export default function App() {
   }, undefined);
   const latestReportAt =
     latestReportRun?.endedAt ?? latestReportRun?.startedAt ?? liveRunState?.completion?.at;
-  const softwareVersionLabel = `v${String(webPackage.version ?? "0.0.0")}`;
-  const softwareCommitSha = "117b1ba";
+  const softwareVersion = String(webPackage.version ?? "0.0.0");
+  const softwareCommitShaFallback = "117b1ba";
   const readinessCounts = SECTION_READINESS_ITEMS.reduce(
     (acc, { key }) => {
       const state = getSectionReadinessState(liveRunState, key);
@@ -2772,14 +2830,15 @@ export default function App() {
                 </div>
               </div>
               <div className="flex w-full flex-col items-start gap-1.5 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end sm:gap-2">
-                <div className="data-pill">
-                  Software Version: {softwareVersionLabel} - {softwareCommitSha}
-                </div>
+                <SoftwareVersionPill
+                  version={softwareVersion}
+                  fallbackSha={softwareCommitShaFallback}
+                />
                 <div className="data-pill flex flex-wrap items-center gap-x-2 gap-y-0.5">
                   <span className="text-zinc-300/80">Links:</span>
                   <a
                     className="transition hover:text-cyan-100"
-                    href="https://github.com/FazioNico/market-monitor#readme"
+                    href={`https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}#readme`}
                     target="_blank"
                     rel="noreferrer"
                   >
@@ -2788,7 +2847,7 @@ export default function App() {
                   <span className="text-zinc-500">•</span>
                   <a
                     className="transition hover:text-cyan-100"
-                    href="https://github.com/FazioNico/market-monitor"
+                    href={`https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}`}
                     target="_blank"
                     rel="noreferrer"
                   >

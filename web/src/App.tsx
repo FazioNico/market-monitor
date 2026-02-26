@@ -57,20 +57,20 @@ interface LiveRunState {
   };
 }
 
-const SECTION_READINESS_ITEMS: Array<{ key: RunReviewSectionKey; label: string }> = [
-  { key: "config", label: "Config" },
-  { key: "news", label: "News Intake" },
-  { key: "marketSnapshot", label: "Market Snapshot" },
-  { key: "macroContext", label: "Macro Context" },
-  { key: "etfFlows", label: "ETF Flows" },
-  { key: "regime", label: "Regime" },
-  { key: "sentiment", label: "Sentiment" },
-  { key: "topArticles", label: "Top Articles" },
-  { key: "outlook", label: "Outlook" },
-  { key: "riskInvalidation", label: "Risk Invalidation" },
-  { key: "positionWording", label: "Positioning" },
-  { key: "diagnostics", label: "Diagnostics" },
-  { key: "report", label: "Report" },
+const SECTION_READINESS_ITEMS: Array<{ key: RunReviewSectionKey; label: string; shortLabel: string }> = [
+  { key: "config", label: "Config", shortLabel: "CFG" },
+  { key: "news", label: "News Intake", shortLabel: "NEWS" },
+  { key: "marketSnapshot", label: "Market Snapshot", shortLabel: "MKT" },
+  { key: "macroContext", label: "Macro Context", shortLabel: "MAC" },
+  { key: "etfFlows", label: "ETF Flows", shortLabel: "ETF" },
+  { key: "regime", label: "Regime", shortLabel: "REG" },
+  { key: "sentiment", label: "Sentiment", shortLabel: "SENT" },
+  { key: "topArticles", label: "Top Articles", shortLabel: "TOP" },
+  { key: "outlook", label: "Outlook", shortLabel: "OUT" },
+  { key: "riskInvalidation", label: "Risk Invalidation", shortLabel: "RISK" },
+  { key: "positionWording", label: "Positioning", shortLabel: "POS" },
+  { key: "diagnostics", label: "Diagnostics", shortLabel: "DIAG" },
+  { key: "report", label: "Report", shortLabel: "REP" },
 ];
 
 const DASHBOARD_VIEWS: Array<{ key: DashboardViewKey; label: string; hint: string }> = [
@@ -2017,6 +2017,22 @@ export default function App() {
   const activeBlockingRunId = activeRunIds[0];
   const hasRunningRun = activeRunIds.length > 0 || liveRunState?.status === "running";
   const launchDisabled = Boolean(hasRunningRun);
+  const readinessCounts = SECTION_READINESS_ITEMS.reduce(
+    (acc, { key }) => {
+      const state = getSectionReadinessState(liveRunState, key);
+      acc[state] += 1;
+      return acc;
+    },
+    { ready: 0, running: 0, standby: 0 } as Record<"ready" | "running" | "standby", number>,
+  );
+  const readinessSequence = SECTION_READINESS_ITEMS.map(({ key, label, shortLabel }) => ({
+    key,
+    label,
+    shortLabel,
+    readiness: getSectionReadinessState(liveRunState, key),
+  }));
+  const runningReadinessLabel = readinessSequence.find((item) => item.readiness === "running")?.label;
+  const selectedReportPath = liveRunState?.completion?.reportFilePath ?? selectedRunListItem?.reportFilePath;
   const launchDisabledReason = launchDisabled
     ? `A run is already in progress${activeBlockingRunId ? ` (${activeBlockingRunId})` : ""}. Concurrent launches are blocked to avoid data / UI conflicts.`
     : undefined;
@@ -2073,63 +2089,86 @@ export default function App() {
           <main className="min-w-0 space-y-4">
             <section className="panel">
               <div className="panel-body">
-                <div className="min-w-0">
-                  <div className="min-w-0">
-                    <div className="mb-3 flex flex-wrap items-center gap-2">
-                      <StatusBadge status={liveRunState?.status ?? selectedRunListItem?.status ?? "idle"} />
-                      {liveRunState?.triggerType ? <span className="data-pill">{liveRunState.triggerType}</span> : null}
-                      {liveRunState?.generatedAt ? <span className="data-pill">{formatDateTime(liveRunState.generatedAt)}</span> : null}
-                      {liveRunState?.completion?.elapsedMs ? (
-                        <span className="data-pill">elapsed {formatDurationMs(liveRunState.completion.elapsedMs)}</span>
-                      ) : null}
-                    </div>
-                    <div className="font-mono text-xs text-zinc-400">
-                      {selectedRunId ? `runId: ${selectedRunId}` : "No run selected"}
-                    </div>
-                    {liveRunState?.completion?.reportFilePath ? (
-                      <div className="mt-2 text-xs text-zinc-400">report: {liveRunState.completion.reportFilePath}</div>
-                    ) : selectedRunListItem?.reportFilePath ? (
-                      <div className="mt-2 text-xs text-zinc-400">report (run-log): {selectedRunListItem.reportFilePath}</div>
+                <div className="min-w-0 space-y-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <StatusBadge status={liveRunState?.status ?? selectedRunListItem?.status ?? "idle"} />
+                    {liveRunState?.triggerType ? <span className="data-pill">{liveRunState.triggerType}</span> : null}
+                    {liveRunState?.generatedAt ? <span className="data-pill">{formatDateTime(liveRunState.generatedAt)}</span> : null}
+                    {liveRunState?.completion?.elapsedMs ? (
+                      <span className="data-pill">elapsed {formatDurationMs(liveRunState.completion.elapsedMs)}</span>
                     ) : null}
-                    {liveRunState?.completion?.message ? (
-                      <div className="mt-3 rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-sm text-zinc-300">
-                        {liveRunState.completion.message}
-                      </div>
+                    {selectedRunId ? (
+                      <span className="data-pill min-w-0 max-w-full font-mono text-[11px]" title={selectedRunId}>
+                        <span className="mr-1 text-zinc-500">run</span>
+                        <span className="truncate">{selectedRunId}</span>
+                      </span>
+                    ) : (
+                      <span className="data-pill text-zinc-500">No run selected</span>
+                    )}
+                    {selectedReportPath ? (
+                      <span className="data-pill min-w-0 max-w-full" title={selectedReportPath}>
+                        <span className="mr-1 text-zinc-500">report</span>
+                        <span className="truncate">{selectedReportPath.split("/").pop() ?? selectedReportPath}</span>
+                      </span>
                     ) : null}
                   </div>
+
+                  {liveRunState?.completion?.message ? (
+                    <div className="rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-sm text-zinc-300">
+                      {liveRunState.completion.message}
+                    </div>
+                  ) : null}
                 </div>
-                <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.02] p-4">
-                  <div className="mb-3 text-xs uppercase tracking-[0.18em] text-zinc-400">Section Readiness</div>
-                  <div className="flex flex-wrap gap-2">
-                    {SECTION_READINESS_ITEMS.map(({ key, label }) => {
-                      const readiness = getSectionReadinessState(liveRunState, key);
-                      return (
-                        <div
-                          key={key}
-                          className={cx(
-                            "inline-flex min-w-0 items-center gap-2 rounded-lg border px-2.5 py-1.5 text-xs",
-                            readiness === "ready"
-                              ? "border-cyan-300/20 bg-cyan-400/10 text-cyan-100"
-                              : readiness === "running"
-                                ? "border-amber-300/20 bg-amber-400/10 text-amber-100"
-                                : "border-white/10 bg-white/[0.02] text-zinc-500",
-                          )}
-                          title={`${label} · ${readiness}`}
-                        >
-                          <span
-                            className={cx(
-                              "h-1.5 w-1.5 shrink-0 rounded-full",
-                              readiness === "ready"
-                                ? "bg-cyan-300 shadow-[0_0_8px_rgba(34,211,238,0.6)]"
-                                : readiness === "running"
-                                  ? "bg-amber-300 shadow-[0_0_8px_rgba(251,191,36,0.55)]"
-                                  : "bg-zinc-600",
-                            )}
-                          />
-                          <span className="max-w-[12rem] truncate">{label}</span>
+
+                <div className="mt-3 rounded-2xl border border-white/10 bg-white/[0.02] p-3">
+                  <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                    <div className="text-xs uppercase tracking-[0.18em] text-zinc-400">Section Readiness</div>
+                    <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+                      <span className="data-pill border border-cyan-300/20 bg-cyan-400/10 text-cyan-100">
+                        ready {readinessCounts.ready}
+                      </span>
+                      <span className="data-pill border border-amber-300/20 bg-amber-400/10 text-amber-100">
+                        running {readinessCounts.running}
+                      </span>
+                      <span className="data-pill text-zinc-400">standby {readinessCounts.standby}</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-black/20 px-2.5 py-2">
+                    <div className="shrink-0 text-[11px] uppercase tracking-[0.16em] text-zinc-400">Workflow</div>
+                    <div className="flex min-w-0 flex-1 items-center gap-1">
+                      {readinessSequence.map(({ key, label, shortLabel, readiness }, index) => (
+                        <div key={key} className="flex min-w-0 flex-1 items-center gap-1">
+                          <div className="group relative min-w-0 flex-1" title={`${index + 1}. ${label} · ${readiness}`}>
+                            <div className="mb-1 truncate text-center text-[9px] font-medium uppercase tracking-[0.1em] text-zinc-500">
+                              {shortLabel}
+                            </div>
+                            <div
+                              className={cx(
+                                "h-2 rounded-full transition-colors",
+                                readiness === "ready"
+                                  ? "bg-cyan-300/90 shadow-[0_0_10px_rgba(34,211,238,0.35)]"
+                                  : readiness === "running"
+                                    ? "animate-pulse bg-amber-300/90 shadow-[0_0_10px_rgba(251,191,36,0.35)]"
+                                    : "bg-white/10",
+                              )}
+                            />
+                            <div className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-1 hidden -translate-x-1/2 whitespace-nowrap rounded-md border border-white/10 bg-ink-950/95 px-2 py-1 text-[10px] text-zinc-200 shadow-lg group-hover:block">
+                              {label}
+                            </div>
+                          </div>
+                          {index < readinessSequence.length - 1 ? <div className="h-px w-1 shrink-0 bg-white/10" /> : null}
                         </div>
-                      );
-                    })}
+                      ))}
+                    </div>
+                    <div className="min-w-0 shrink text-right text-[11px] text-zinc-300">
+                      <span className="font-mono text-zinc-200">{readinessCounts.ready + readinessCounts.running}</span>
+                      <span className="text-zinc-500">/{SECTION_READINESS_ITEMS.length}</span>
+                      {runningReadinessLabel ? (
+                        <span className="ml-2 inline-block max-w-[11rem] truncate text-amber-200" title={runningReadinessLabel}>
+                          {runningReadinessLabel}
+                        </span>
+                      ) : null}
+                    </div>
                   </div>
                 </div>
               </div>

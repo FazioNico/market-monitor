@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import webPackage from "../package.json";
 
 import type {
   RunListItem,
@@ -302,6 +303,18 @@ function formatDateTime(value?: string): string {
     dateStyle: "short",
     timeStyle: "medium",
   }).format(date);
+}
+
+function formatUtcDateTimeMinute(value?: string): string {
+  if (!value) return "n/a";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(date.getUTCDate()).padStart(2, "0");
+  const hours = String(date.getUTCHours()).padStart(2, "0");
+  const minutes = String(date.getUTCMinutes()).padStart(2, "0");
+  return `${year}-${month}-${day} ${hours}:${minutes} UTC`;
 }
 
 function formatDurationMs(ms?: number): string {
@@ -2691,6 +2704,19 @@ export default function App() {
   const hasRunningRun =
     activeRunIds.length > 0 || liveRunState?.status === "running";
   const launchDisabled = Boolean(hasRunningRun);
+  const latestReportRun = runs.reduce<RunListItem | undefined>((latest, run) => {
+    if (!run.reportFilePath) return latest;
+    if (!latest) return run;
+    const currentTs = Date.parse(run.endedAt ?? run.startedAt);
+    const latestTs = Date.parse(latest.endedAt ?? latest.startedAt);
+    if (Number.isNaN(currentTs)) return latest;
+    if (Number.isNaN(latestTs)) return run;
+    return currentTs > latestTs ? run : latest;
+  }, undefined);
+  const latestReportAt =
+    latestReportRun?.endedAt ?? latestReportRun?.startedAt ?? liveRunState?.completion?.at;
+  const softwareVersionLabel = `v${String(webPackage.version ?? "0.0.0")}`;
+  const softwareCommitSha = "117b1ba";
   const readinessCounts = SECTION_READINESS_ITEMS.reduce(
     (acc, { key }) => {
       const state = getSectionReadinessState(liveRunState, key);
@@ -2725,7 +2751,7 @@ export default function App() {
       <div className="pointer-events-none absolute inset-0 bg-grid-fine opacity-[0.06]" />
       <div className="relative mx-auto flex w-full max-w-[1600px] flex-col gap-4 px-4 py-4 sm:px-6 sm:py-6">
         <header className="panel px-5 py-4">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
             <div>
               <div className="font-display text-xs uppercase tracking-[0.28em] text-cyan-200/80">
                 Market Monitor
@@ -2738,10 +2764,38 @@ export default function App() {
                 directional view and risk guidance.
               </p>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="data-pill">frontend: Vite + React + Tailwind</div>
-              <div className="data-pill">transport: SSE</div>
-              <div className="data-pill">replay: JSONL</div>
+            <div className="flex w-full flex-col items-start gap-1.5 lg:max-w-[860px] lg:items-end">
+              <div className="flex w-full flex-col items-start gap-1.5 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end sm:gap-2">
+                <div className="data-pill">Schedule: Daily at 08:00 UTC</div>
+                <div className="data-pill">
+                  Latest Report: {formatUtcDateTimeMinute(latestReportAt)}
+                </div>
+              </div>
+              <div className="flex w-full flex-col items-start gap-1.5 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end sm:gap-2">
+                <div className="data-pill">
+                  Software Version: {softwareVersionLabel} - {softwareCommitSha}
+                </div>
+                <div className="data-pill flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                  <span className="text-zinc-300/80">Links:</span>
+                  <a
+                    className="transition hover:text-cyan-100"
+                    href="https://github.com/FazioNico/market-monitor#readme"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Sources &amp; Methodology
+                  </a>
+                  <span className="text-zinc-500">•</span>
+                  <a
+                    className="transition hover:text-cyan-100"
+                    href="https://github.com/FazioNico/market-monitor"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    GitHub
+                  </a>
+                </div>
+              </div>
             </div>
           </div>
         </header>

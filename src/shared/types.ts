@@ -10,6 +10,7 @@ export type RunLifecycleStatus =
 export type ReportStatus = "complete" | "incomplete";
 
 export type LlmStatus = "not_used" | "success" | "timeout" | "error";
+export type LlmProvider = "ollama" | "gemini";
 
 export interface RunLogEntry {
   runId: string;
@@ -29,6 +30,7 @@ export interface AppEnv {
   fredApiKey?: string;
   coingeckoApiKey?: string;
   hyperliquidDex?: string;
+  llmProvider?: LlmProvider;
   llmApiKey?: string;
   llmBaseUrl?: string;
   llmModel?: string;

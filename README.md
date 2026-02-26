@@ -59,11 +59,16 @@ FRED_API_KEY=...
 Optional:
 
 ```dotenv
+LLM_PROVIDER=ollama # or gemini
 COINGECKO_API_KEY=...
 LLM_API_KEY=...
 LLM_BASE_URL=...
 LLM_MODEL=...
 ```
+
+Provider notes:
+- `ollama`: set `LLM_BASE_URL` + `LLM_MODEL` (optional `LLM_API_KEY`)
+- `gemini`: set `LLM_PROVIDER=gemini`, `LLM_API_KEY`, `LLM_MODEL` (optional `LLM_BASE_URL`)
 
 If LLM-backed skills fail, the app writes an `incomplete` report and logs `partial_success`.
 

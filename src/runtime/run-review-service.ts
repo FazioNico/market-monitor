@@ -8,6 +8,7 @@ import type {
 } from "./run-review-events";
 import { ValidationError } from "../shared/errors";
 import type {
+  AppEnv,
   EtfFlowSnapshot,
   MacroSeriesObservation,
   MarketSnapshotItem,
@@ -46,7 +47,9 @@ import {
 } from "../analysis/position-wording";
 import { createBindingRegistry } from "../skills/binding-registry";
 import { loadSkillsFromDirectory } from "../skills/skill-loader";
+import { createGeminiInvoke } from "../llm/gemini-client";
 import { createOllamaInvoke } from "../llm/ollama-client";
+import type { LlmInvoke } from "../llm/types";
 
 export interface RunReviewServiceOptions {
   cwd?: string;
@@ -95,6 +98,33 @@ export class RunReviewServiceExecutionError extends Error {
   }
 }
 
+function createConfiguredLlmInvoke(env: AppEnv, fetchFn?: typeof fetch): LlmInvoke | undefined {
+  const provider = env.llmProvider ?? "ollama";
+
+  if (provider === "gemini") {
+    if (!env.llmModel || !env.llmApiKey) {
+      return undefined;
+    }
+    return createGeminiInvoke({
+      model: env.llmModel,
+      apiKey: env.llmApiKey,
+      baseUrl: env.llmBaseUrl,
+      fetchFn,
+    });
+  }
+
+  if (!env.llmBaseUrl || !env.llmModel) {
+    return undefined;
+  }
+
+  return createOllamaInvoke({
+    baseUrl: env.llmBaseUrl,
+    model: env.llmModel,
+    apiKey: env.llmApiKey,
+    fetchFn,
+  });
+}
+
 function dateFromOverride(dateOverride: string | undefined): Date | undefined {
   if (!dateOverride) {
     return undefined;
@@ -107,6 +137,10 @@ function flatten<T>(input: T[][]): T[] {
 }
 
 function describeLlmError(error: unknown): string {
+  if (error instanceof ValidationError) {
+    const details = error.issues.length > 0 ? ` [${error.issues.join(" | ")}]` : "";
+    return `${error.name ? `${error.name}: ` : ""}${error.message}${details}`.trim().slice(0, 800);
+  }
   if (error instanceof Error) {
     return `${error.name ? `${error.name}: ` : ""}${error.message}`.trim().slice(0, 800);
   }
@@ -248,16 +282,7 @@ export async function runReviewService(
     await emitStageStarted("load_config");
     const feedCatalog = await readFeedCatalogFile(context.paths.rssFeedsPath);
     const watchlist = await readWatchlistFile(context.paths.watchlistPath);
-    const llmInvoke =
-      options.llmInvoke ??
-      (context.env.llmBaseUrl && context.env.llmModel
-        ? createOllamaInvoke({
-            baseUrl: context.env.llmBaseUrl,
-            model: context.env.llmModel,
-            apiKey: context.env.llmApiKey,
-            fetchFn: options.fetchFn,
-          })
-        : undefined);
+    const llmInvoke = options.llmInvoke ?? createConfiguredLlmInvoke(context.env, options.fetchFn);
 
     const bindingRegistry = createBindingRegistry({ llm: { invoke: llmInvoke } });
     const loadedSkills = await loadSkillsFromDirectory({
@@ -289,6 +314,7 @@ export async function runReviewService(
       },
       llm: {
         enabled: Boolean(llmInvoke),
+        provider: context.env.llmProvider ?? "ollama",
         model: context.env.llmModel ?? null,
       },
     });
@@ -518,6 +544,7 @@ export async function runReviewService(
         {
           fetchFn: options.fetchFn,
           llmInvoke,
+          concurrency: context.env.llmProvider === "gemini" ? 1 : undefined,
           onLlmError: (error) => {
             topArticlesSummaryLlmError ??= describeLlmError(error);
           },

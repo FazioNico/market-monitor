@@ -1,5 +1,5 @@
 import { ValidationError } from "../shared/errors";
-import type { AppEnv } from "../shared/types";
+import type { AppEnv, LlmProvider } from "../shared/types";
 import { normalizeOptionalString } from "../shared/validation";
 
 type RawEnv = Record<string, string | undefined>;
@@ -12,6 +12,8 @@ function defaultString(value: string | undefined, fallback: string): string {
 export function parseEnv(env: RawEnv = process.env): AppEnv {
   const reportsDir = defaultString(env.REPORTS_DIR, "reports");
   const runLogPath = defaultString(env.RUN_LOG_PATH, "logs/runs.jsonl");
+  const llmProviderRaw = normalizeOptionalString(env.LLM_PROVIDER);
+  let llmProvider: LlmProvider | undefined;
 
   const issues: string[] = [];
 
@@ -21,6 +23,14 @@ export function parseEnv(env: RawEnv = process.env): AppEnv {
 
   if (reportsDir.length === 0) {
     issues.push("REPORTS_DIR must not be empty");
+  }
+
+  if (llmProviderRaw) {
+    if (llmProviderRaw === "ollama" || llmProviderRaw === "gemini") {
+      llmProvider = llmProviderRaw;
+    } else {
+      issues.push("LLM_PROVIDER must be one of: ollama, gemini");
+    }
   }
 
   if (issues.length > 0) {
@@ -33,6 +43,7 @@ export function parseEnv(env: RawEnv = process.env): AppEnv {
     fredApiKey: normalizeOptionalString(env.FRED_API_KEY),
     coingeckoApiKey: normalizeOptionalString(env.COINGECKO_API_KEY),
     hyperliquidDex: normalizeOptionalString(env.HYPERLIQUID_DEX),
+    llmProvider,
     llmApiKey: normalizeOptionalString(env.LLM_API_KEY),
     llmBaseUrl: normalizeOptionalString(env.LLM_BASE_URL),
     llmModel: normalizeOptionalString(env.LLM_MODEL),

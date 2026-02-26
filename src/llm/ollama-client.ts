@@ -1,9 +1,5 @@
 import { ValidationError } from "../shared/errors";
-
-export interface LlmInvokePrompt {
-  skillDescription: string;
-  context: unknown;
-}
+import type { LlmInvokePrompt } from "./types";
 
 export interface OllamaInvokeOptions {
   baseUrl: string;

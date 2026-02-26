@@ -502,6 +502,18 @@ function getReportPayload(value: unknown): Record<string, unknown> | undefined {
   return isRecord(value) ? value : undefined;
 }
 
+function downloadTextFile(filename: string, content: string, mimeType: string): void {
+  const blob = new Blob([content], { type: mimeType });
+  const objectUrl = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = objectUrl;
+  link.download = filename;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(objectUrl);
+}
+
 function getRegimePayload(value: unknown):
   | {
       label?: "risk_on" | "risk_off" | "transition" | string;
@@ -2719,7 +2731,7 @@ export default function App() {
                 Market Monitor
               </div>
               <h1 className="mt-1 font-display text-2xl font-bold tracking-tight text-white sm:text-3xl">
-                Briefing Desk
+                Report Desk
               </h1>
               <p className="mt-2 max-w-3xl text-sm leading-relaxed text-zinc-300">
                 Consolidated macro, news, and price-action signals with a clear
@@ -2997,6 +3009,29 @@ export default function App() {
                   <Panel
                     title="Report Markdown"
                     subtitle="Final markdown (replayed from JSONL stream when available)"
+                    actions={
+                      <button
+                        type="button"
+                        disabled={!reportMarkdown}
+                        onClick={() => {
+                          if (!reportMarkdown) return;
+                          const filename =
+                            liveRunState?.completion?.reportFileName ??
+                            selectedRunListItem?.reportFilePath?.split("/").pop() ??
+                            `${selectedRunId ?? "market-monitor-report"}.md`;
+                          downloadTextFile(filename, reportMarkdown, "text/markdown;charset=utf-8");
+                        }}
+                        className={cx(
+                          "rounded-lg border px-3 py-1.5 text-xs transition",
+                          reportMarkdown
+                            ? "border-white/15 bg-white/[0.03] text-zinc-200 hover:bg-white/[0.06]"
+                            : "cursor-not-allowed border-white/10 bg-white/[0.02] text-zinc-500",
+                        )}
+                        title={reportMarkdown ? "Download markdown file" : "Markdown not available yet"}
+                      >
+                        Download .md
+                      </button>
+                    }
                   >
                     {reportMarkdown ? (
                       <pre className="max-h-[70vh] overflow-auto rounded-xl border border-white/10 bg-black/30 p-4 text-xs leading-relaxed text-zinc-200">

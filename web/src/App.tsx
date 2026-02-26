@@ -15,7 +15,7 @@ const API_BASE =
   "http://localhost:3001";
 const GITHUB_OWNER = "FazioNico";
 const GITHUB_REPO = "market-monitor";
-const GITHUB_DEFAULT_BRANCH = "main";
+const GITHUB_DEFAULT_BRANCH_CANDIDATES = ["main", "master"] as const;
 
 type ConnectionState =
   | "idle"
@@ -343,25 +343,30 @@ function SoftwareVersionPill({
 
     async function loadLatestCommitSha(): Promise<void> {
       try {
-        const response = await fetch(
-          `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/commits/${GITHUB_DEFAULT_BRANCH}`,
-          {
-            signal: controller.signal,
-            headers: {
-              accept: "application/vnd.github+json",
+        for (const branch of GITHUB_DEFAULT_BRANCH_CANDIDATES) {
+          const response = await fetch(
+            `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/commits?sha=${encodeURIComponent(branch)}&per_page=1`,
+            {
+              signal: controller.signal,
+              headers: {
+                accept: "application/vnd.github+json",
+                "X-GitHub-Api-Version": "2022-11-28",
+              },
             },
-          },
-        );
-        if (!response.ok) {
-          return;
-        }
-        const payload = (await response.json()) as { sha?: string };
-        const shortSha =
-          typeof payload.sha === "string" && payload.sha.length >= 7
-            ? payload.sha.slice(0, 7)
-            : undefined;
-        if (!cancelled && shortSha) {
-          setCommitSha(shortSha);
+          );
+          if (!response.ok) {
+            continue;
+          }
+          const payload = (await response.json()) as Array<{ sha?: string }>;
+          const first = Array.isArray(payload) ? payload[0] : undefined;
+          const shortSha =
+            typeof first?.sha === "string" && first.sha.length >= 7
+              ? first.sha.slice(0, 7)
+              : undefined;
+          if (!cancelled && shortSha) {
+            setCommitSha(shortSha);
+            return;
+          }
         }
       } catch {
         // Keep fallback SHA when GitHub API is unavailable or rate-limited.

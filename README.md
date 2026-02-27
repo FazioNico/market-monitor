@@ -2,7 +2,7 @@
 
 # Market Monitor
 
-**A local market intelligence agent that replaces a manual daily analysis workflow with a repeatable 5-minute automated run.**
+**Automated market intelligence agent that turns hours of manual analysis into a 5-minute daily report.**
 
 <img src="./preview.png" alt="Market Monitor Dashboard Preview" width="100%" />
 
@@ -363,4 +363,4 @@ bun run test:coverage
 
 ## License
 
-Currently a private project (update this section if/when open sourced).
+This project is open source.

@@ -1,0 +1,6 @@
+*
+!.gitignore
+!reports/
+!reports/**
+!logs/
+!logs/**

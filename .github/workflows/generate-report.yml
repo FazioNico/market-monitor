@@ -116,6 +116,12 @@ jobs:
             cat "$SOURCE_LOGS/runs.jsonl" >> "$TARGET_DIR/logs/runs.jsonl"
           fi
 
+          # Publish per-run event streams for static dashboard replay.
+          if [ -d "$SOURCE_LOGS/run-events" ]; then
+            mkdir -p "$TARGET_DIR/logs/run-events"
+            rsync -a "$SOURCE_LOGS/run-events"/ "$TARGET_DIR/logs/run-events/"
+          fi
+
           (
             cd "$TARGET_DIR"
             git add -A

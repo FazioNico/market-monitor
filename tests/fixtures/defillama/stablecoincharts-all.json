@@ -1,0 +1,50 @@
+[
+  {
+    "date": "1763596800",
+    "totalCirculatingUSD": {
+      "peggedUSD": 214000000000
+    }
+  },
+  {
+    "date": "1763683200",
+    "totalCirculatingUSD": {
+      "peggedUSD": 215250000000
+    }
+  },
+  {
+    "date": "1763769600",
+    "totalCirculatingUSD": {
+      "peggedUSD": 216000000000
+    }
+  },
+  {
+    "date": "1763856000",
+    "totalCirculatingUSD": {
+      "peggedUSD": 216900000000
+    }
+  },
+  {
+    "date": "1763942400",
+    "totalCirculatingUSD": {
+      "peggedUSD": 217800000000
+    }
+  },
+  {
+    "date": "1764028800",
+    "totalCirculatingUSD": {
+      "peggedUSD": 218600000000
+    }
+  },
+  {
+    "date": "1764115200",
+    "totalCirculatingUSD": {
+      "peggedUSD": 219700000000
+    }
+  },
+  {
+    "date": "1764201600",
+    "totalCirculatingUSD": {
+      "peggedUSD": 220500000000
+    }
+  }
+]

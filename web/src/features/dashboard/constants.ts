@@ -35,6 +35,7 @@ export const SECTION_READINESS_ITEMS: Array<{
   { key: "config", label: "Config", shortLabel: "CFG" },
   { key: "news", label: "News Intake", shortLabel: "NEWS" },
   { key: "marketSnapshot", label: "Market Snapshot", shortLabel: "MKT" },
+  { key: "stablecoinSupply", label: "Stablecoin Supply", shortLabel: "SC" },
   { key: "macroContext", label: "Macro Context", shortLabel: "MAC" },
   { key: "etfFlows", label: "ETF Flows", shortLabel: "ETF" },
   { key: "regime", label: "Regime", shortLabel: "REG" },
@@ -55,6 +56,7 @@ export const DASHBOARD_VIEWS: Array<{
   { key: "overview", label: "Overview", hint: "Live essentials" },
   { key: "news", label: "News", hint: "Top articles / briefing" },
   { key: "data", label: "Data", hint: "Market / macro / ingestion" },
+  { key: "onchain", label: "On Chain", hint: "Stablecoin supply" },
   { key: "ops", label: "Ops", hint: "Timeline + logs" },
   { key: "report", label: "Report", hint: "Final markdown" },
 ];
@@ -63,6 +65,7 @@ export const SECTION_STAGE_MAP: Record<RunReviewSectionKey, RunReviewStageKey[]>
   config: ["load_config"],
   news: ["fetch_rss"],
   marketSnapshot: ["fetch_market_macro"],
+  stablecoinSupply: ["fetch_market_macro"],
   macroContext: ["fetch_market_macro"],
   etfFlows: ["fetch_market_macro"],
   regime: ["detect_regime"],

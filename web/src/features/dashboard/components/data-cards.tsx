@@ -12,6 +12,7 @@ import {
   getEtfFlowsPayload,
   getEtfRowTotalNetFlowUsdM,
   getMacroPayload,
+  getStablecoinSupplyPayload,
   getTopArticlesPayload,
   splitMarketSnapshotRows,
 } from "../utils/parsers";
@@ -242,6 +243,29 @@ function getNewsSourceSummaries(
     });
 }
 
+function formatUsdCompact(value?: number): string {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return "N/A";
+  }
+
+  const abs = Math.abs(value);
+  const sign = value > 0 ? "+" : value < 0 ? "-" : "";
+  if (abs >= 1_000_000_000) {
+    return `${sign}$${(abs / 1_000_000_000).toFixed(2)}B`;
+  }
+  if (abs >= 1_000_000) {
+    return `${sign}$${(abs / 1_000_000).toFixed(1)}M`;
+  }
+  return `${sign}$${abs.toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
+}
+
+function formatPctCompact(value?: number): string {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return "N/A";
+  }
+  return `${value >= 0 ? "+" : ""}${value.toFixed(2)}%`;
+}
+
 function MarketSnapshotTable({
   rows,
 }: {
@@ -403,6 +427,72 @@ export function OtherMarketSnapshotCard({ state }: { state?: LiveRunState }) {
       subtitle="Unclassified snapshot rows kept for visibility"
     >
       <MarketSnapshotTable title="Other Instruments" rows={other} />
+    </Panel>
+  );
+}
+
+export function StablecoinSupplyCard({ state }: { state?: LiveRunState }) {
+  const payload = getStablecoinSupplyPayload(state?.sections.stablecoinSupply);
+  const snapshot = payload?.snapshot;
+
+  return (
+    <Panel
+      title="Stablecoins Supply Snapshot"
+      subtitle="DefiLlama global stablecoin supply deltas"
+    >
+      {!payload ? (
+        <div className="text-sm text-zinc-400">Waiting for on-chain data.</div>
+      ) : !payload.available || !snapshot ? (
+        <div className="rounded-xl border border-white/10 bg-white/[0.02] p-3 text-sm text-zinc-300">
+          <div>No stablecoin supply snapshot available for this run.</div>
+          {payload.error ? (
+            <div className="mt-2 text-xs text-amber-200">{payload.error}</div>
+          ) : null}
+        </div>
+      ) : (
+        <div className="space-y-4">
+          <div className="grid gap-3 md:grid-cols-3">
+            <div className="rounded-xl border border-white/10 bg-white/[0.02] p-3">
+              <div className="text-xs uppercase tracking-[0.16em] text-zinc-400">
+                Total Supply
+              </div>
+              <div className="mt-2 text-xl font-semibold text-zinc-100">
+                {formatUsdCompact(snapshot.currentSupplyUsd)}
+              </div>
+            </div>
+            <div className="rounded-xl border border-white/10 bg-white/[0.02] p-3">
+              <div className="text-xs uppercase tracking-[0.16em] text-zinc-400">
+                24h Change
+              </div>
+              <div className="mt-2 text-xl font-semibold text-zinc-100">
+                {formatUsdCompact(snapshot.change24hUsd)}
+              </div>
+              <div className="mt-1 text-xs text-zinc-400">
+                {formatPctCompact(snapshot.change24hPct)}
+              </div>
+            </div>
+            <div className="rounded-xl border border-white/10 bg-white/[0.02] p-3">
+              <div className="text-xs uppercase tracking-[0.16em] text-zinc-400">
+                7d Change
+              </div>
+              <div className="mt-2 text-xl font-semibold text-zinc-100">
+                {formatUsdCompact(snapshot.change7dUsd)}
+              </div>
+              <div className="mt-1 text-xs text-zinc-400">
+                {formatPctCompact(snapshot.change7dPct)}
+              </div>
+            </div>
+          </div>
+          <div className="rounded-xl border border-white/10 bg-black/20 p-3 text-xs text-zinc-400">
+            <div>Captured: {formatDateTime(snapshot.capturedAt)}</div>
+            <div>24h reference: {formatDateTime(snapshot.reference24hAt)}</div>
+            <div>7d reference: {formatDateTime(snapshot.reference7dAt)}</div>
+            <div className="mt-2">
+              Source: {snapshot.source ?? "defillama"}
+            </div>
+          </div>
+        </div>
+      )}
     </Panel>
   );
 }

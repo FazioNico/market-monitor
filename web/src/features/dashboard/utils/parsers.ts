@@ -8,6 +8,7 @@ import type {
   EtfFlowUiRow,
   EtfFlowsSectionPayload,
   LiveRunState,
+  StablecoinSupplySectionPayload,
   TriggerType,
 } from "../types";
 
@@ -103,6 +104,35 @@ export function getTopArticlesPayload(
   return {
     items,
     method: typeof value.method === "string" ? value.method : undefined,
+  };
+}
+
+export function getStablecoinSupplyPayload(
+  value: unknown,
+): StablecoinSupplySectionPayload | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  let snapshot: StablecoinSupplySectionPayload["snapshot"];
+  if (isRecord(value.snapshot)) {
+    snapshot = {
+      source: asString(value.snapshot.source),
+      capturedAt: asString(value.snapshot.capturedAt),
+      currentSupplyUsd: asNumber(value.snapshot.currentSupplyUsd),
+      change24hUsd: asNumber(value.snapshot.change24hUsd),
+      change7dUsd: asNumber(value.snapshot.change7dUsd),
+      change24hPct: asNumber(value.snapshot.change24hPct),
+      change7dPct: asNumber(value.snapshot.change7dPct),
+      reference24hAt: asString(value.snapshot.reference24hAt),
+      reference7dAt: asString(value.snapshot.reference7dAt),
+    };
+  }
+
+  return {
+    available: asBoolean(value.available),
+    error: asString(value.error),
+    snapshot,
   };
 }
 

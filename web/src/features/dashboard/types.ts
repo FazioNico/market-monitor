@@ -23,7 +23,7 @@ export type LiveRunTerminalStatus =
   | "failed"
   | "skipped_duplicate";
 
-export type DashboardViewKey = "overview" | "news" | "data" | "ops" | "report";
+export type DashboardViewKey = "overview" | "news" | "data" | "onchain" | "ops" | "report";
 
 export interface LiveLogLine {
   at: string;
@@ -90,5 +90,21 @@ export type EtfFlowsSectionPayload = {
     source?: string;
     capturedAt?: string;
     datasets: EtfFlowUiDataset[];
+  };
+};
+
+export type StablecoinSupplySectionPayload = {
+  available?: boolean;
+  error?: string;
+  snapshot?: {
+    source?: string;
+    capturedAt?: string;
+    currentSupplyUsd?: number;
+    change24hUsd?: number;
+    change7dUsd?: number;
+    change24hPct?: number;
+    change7dPct?: number;
+    reference24hAt?: string;
+    reference7dAt?: string;
   };
 };

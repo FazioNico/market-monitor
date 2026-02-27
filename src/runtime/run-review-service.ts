@@ -14,6 +14,7 @@ import type {
   MarketSnapshotItem,
   NewsItem,
   NormalizedNewsItem,
+  StablecoinSupplySnapshot,
   TriggerType,
   WatchlistInstrument,
 } from "../shared/types";
@@ -27,6 +28,7 @@ import { deduplicateNews } from "../ingest/deduplicate-news";
 import { fetchRssFeeds } from "../ingest/rss-fetch";
 import { parseRssEntries } from "../ingest/rss-parse";
 import { createCoinGeckoClient } from "../market/coingecko-client";
+import { createDefiLlamaStablecoinsClient } from "../market/defillama-stablecoins-client";
 import { createFarsideEtfClient } from "../market/farside-etf-client";
 import { createFredClient } from "../market/fred-client";
 import { createHyperliquidClient } from "../market/hyperliquid-client";
@@ -454,23 +456,43 @@ export async function runReviewService(
     const farsideEtfClient = createFarsideEtfClient({
       fetchFn: options.fetchFn,
     });
+    const defiLlamaStablecoinsClient = createDefiLlamaStablecoinsClient({
+      fetchFn: options.fetchFn,
+    });
 
     let etfFlowsError: string | undefined;
+    let stablecoinSupplyError: string | undefined;
     await emitStageStarted("fetch_market_macro");
-    const [marketSnapshot, macroContext, etfFlowsResult] = await Promise.all([
+    const [marketSnapshot, macroContext, etfFlowsResult, stablecoinSupplyResult] = await Promise.all([
       buildMarketSnapshot(watchlist.instruments as WatchlistInstrument[], providers),
       fetchMacroSeriesContext(providers),
       farsideEtfClient
         .fetchEtfFlowSnapshot()
         .then((value) => ({ ok: true as const, value }))
         .catch((error) => ({ ok: false as const, error })),
+      defiLlamaStablecoinsClient
+        .fetchStablecoinSupplySnapshot()
+        .then((value) => ({ ok: true as const, value }))
+        .catch((error) => ({ ok: false as const, error })),
     ]);
     const etfFlows: EtfFlowSnapshot | undefined = etfFlowsResult.ok ? etfFlowsResult.value : undefined;
+    const stablecoinSupply: StablecoinSupplySnapshot | undefined = stablecoinSupplyResult.ok
+      ? stablecoinSupplyResult.value
+      : undefined;
     if (!etfFlowsResult.ok) {
       etfFlowsError = describeLlmError(etfFlowsResult.error);
       await emitLog("error", `ETF flow scraping failure (Farside): ${etfFlowsError}`);
     }
+    if (!stablecoinSupplyResult.ok) {
+      stablecoinSupplyError = describeLlmError(stablecoinSupplyResult.error);
+      await emitLog("warn", `On-chain stablecoin supply fetch failure (DefiLlama): ${stablecoinSupplyError}`);
+    }
     await emitSection("marketSnapshot", marketSnapshot);
+    await emitSection("stablecoinSupply", {
+      available: Boolean(stablecoinSupply),
+      error: stablecoinSupplyError ?? null,
+      snapshot: stablecoinSupply ?? null,
+    });
     await emitSection("macroContext", macroContext);
     await emitSection("etfFlows", {
       available: Boolean(etfFlows),
@@ -479,6 +501,7 @@ export async function runReviewService(
     });
     await emitStageCompleted("fetch_market_macro", {
       marketSnapshot: marketSnapshot.length,
+      stablecoinSupply: stablecoinSupply ? 1 : 0,
       macroContext: macroContext.length,
       etfDatasets: etfFlows?.datasets.length ?? 0,
     });
@@ -682,6 +705,7 @@ export async function runReviewService(
         ...(marketProviders.has("alphavantage") ? ["Alpha Vantage"] : []),
         "CoinGecko",
         ...(marketProviders.has("hyperliquid") ? ["Hyperliquid"] : []),
+        ...(stablecoinSupply ? ["DefiLlama"] : []),
         "FRED",
         ...(etfFlows ? ["Farside"] : []),
       ],
@@ -691,6 +715,7 @@ export async function runReviewService(
     const diagnostics = [
       `Feeds processed: ${feedCatalog.entries.length}`,
       `Watchlist enabled: ${watchlist.instruments.length}`,
+      `Stablecoin supply available: ${stablecoinSupply ? "yes" : "no"}`,
       `ETF flow datasets: ${etfFlows?.datasets.length ?? 0}`,
       ...(etfFlows
         ? etfFlows.datasets.map(
@@ -707,6 +732,7 @@ export async function runReviewService(
       ...(topArticlesSummaryEnrichmentError
         ? [`Top article summary enrichment error: ${topArticlesSummaryEnrichmentError}`]
         : []),
+      ...(stablecoinSupplyError ? [`Stablecoin supply error (DefiLlama): ${stablecoinSupplyError}`] : []),
       ...(etfFlowsError ? [`ETF flow scraping error (Farside): ${etfFlowsError}`] : []),
     ];
     await emitSection("diagnostics", diagnostics);

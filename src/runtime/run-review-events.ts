@@ -22,6 +22,7 @@ export type RunReviewSectionKey =
   | "config"
   | "news"
   | "marketSnapshot"
+  | "stablecoinSupply"
   | "macroContext"
   | "etfFlows"
   | "regime"
@@ -113,4 +114,3 @@ export interface RunReviewEventEnvelope {
   sentAt: string;
   event: RunReviewServiceEvent;
 }
-

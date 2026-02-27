@@ -1,5 +1,11 @@
 import { ValidationError } from "../../shared/errors";
 import type { TriggerType } from "../../shared/types";
+import { createAppContext } from "../../runtime/app-context";
+import {
+  appendRunEventEnvelope,
+  buildRunEventLogPath,
+  createRunEventEnvelope,
+} from "../../runtime/run-event-log";
 import type {
   RunReviewServiceOptions,
 } from "../../runtime/run-review-service";
@@ -92,6 +98,14 @@ function handleCliEvent(
 export async function runReviewCommand(options: RunReviewCommandOptions = {}): Promise<number> {
   const logger = options.logger ?? console;
   const argv = options.argv ?? [];
+  const appContext = createAppContext({
+    cwd: options.cwd,
+    env: options.env,
+  });
+  const runEventLogStateByRunId = new Map<
+    string,
+    { eventLogPath: string; nextEventId: number }
+  >();
 
   let parsedArgs: ParsedRunReviewArgs;
   try {
@@ -131,6 +145,31 @@ export async function runReviewCommand(options: RunReviewCommandOptions = {}): P
       llmInvoke: options.llmInvoke,
       onEvent: async (event) => {
         handleCliEvent(event, progress, logger, eventState);
+
+        const existingState = runEventLogStateByRunId.get(event.runId);
+        const runState =
+          existingState ??
+          (() => {
+            const created = {
+              eventLogPath: buildRunEventLogPath(
+                appContext.paths.logsDir,
+                event.runId,
+              ),
+              nextEventId: 1,
+            };
+            runEventLogStateByRunId.set(event.runId, created);
+            return created;
+          })();
+
+        await appendRunEventEnvelope(
+          runState.eventLogPath,
+          createRunEventEnvelope({
+            id: runState.nextEventId,
+            runId: event.runId,
+            event,
+          }),
+        );
+        runState.nextEventId += 1;
       },
     });
 
@@ -157,4 +196,3 @@ export async function runReviewCommand(options: RunReviewCommandOptions = {}): P
     progress.stop();
   }
 }
-

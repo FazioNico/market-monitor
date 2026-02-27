@@ -26,7 +26,7 @@ export function detectRegime(input: {
     label,
     dispersionSignal:
       input.marketSnapshot.length > 1
-        ? "Mixed cross-asset crypto returns observed."
+        ? "Mixed cross-asset returns observed."
         : "Single-instrument snapshot; dispersion signal limited.",
     correlationSignal: avg24h >= 0 ? "Short-term correlation bias positive." : "Short-term correlation bias defensive.",
     momentumSignal:
@@ -36,6 +36,6 @@ export function detectRegime(input: {
         ? `Macro context includes unemployment at ${unemployment.toFixed(2)}.`
         : "Macro context partially unavailable.",
     macroContext: input.macroContext,
-    rationale: `Regime classified as ${label} using crypto momentum and available macro context.`,
+    rationale: `Regime classified as ${label} using market momentum and available macro context.`,
   };
 }

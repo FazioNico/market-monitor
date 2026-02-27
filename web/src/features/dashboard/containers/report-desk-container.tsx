@@ -23,6 +23,7 @@ import {
   CommoditiesSnapshotCard,
   CryptoSnapshotCard,
   EtfFlowsCard,
+  IndexesSnapshotCard,
   MacroContextCard,
   NewsSourcesCard,
   OtherMarketSnapshotCard,
@@ -414,21 +415,24 @@ export function ReportDeskContainer() {
 
             {activeView === "data" ? (
               <>
-                <div className="grid items-start gap-4 xl:grid-cols-2">
+                <div className="grid items-start gap-4 xl:grid-cols-2 2xl:grid-cols-3">
                   <RevealIn delayMs={0}>
                     <CryptoSnapshotCard state={liveRunState} />
                   </RevealIn>
                   <RevealIn delayMs={50}>
+                    <IndexesSnapshotCard state={liveRunState} />
+                  </RevealIn>
+                  <RevealIn delayMs={100}>
                     <CommoditiesSnapshotCard state={liveRunState} />
                   </RevealIn>
                 </div>
-                <RevealIn delayMs={90}>
+                <RevealIn delayMs={140}>
                   <OtherMarketSnapshotCard state={liveRunState} />
                 </RevealIn>
-                <RevealIn delayMs={130}>
+                <RevealIn delayMs={180}>
                   <MacroContextCard state={liveRunState} />
                 </RevealIn>
-                <RevealIn delayMs={170}>
+                <RevealIn delayMs={220}>
                   <EtfFlowsCard state={liveRunState} />
                 </RevealIn>
               </>

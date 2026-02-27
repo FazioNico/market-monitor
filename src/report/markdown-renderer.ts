@@ -390,11 +390,14 @@ function renderTacticalOutlookSection(input: RenderReportInput): string[] {
 function renderMacroDashboardSection(input: RenderReportInput): string[] {
   const lines: string[] = [];
   const macroObservations = collectMacroObservations(input);
+  const alphaVantageItems = input.marketSnapshot.filter((item) =>
+    item.provider.toLowerCase().includes("alphavantage"),
+  );
   const macroCommodityItems = input.marketSnapshot.filter(isMacroCommoditySnapshot);
 
   lines.push("## 5. Macro Dashboard");
 
-  if (macroObservations.length === 0 && macroCommodityItems.length === 0) {
+  if (macroObservations.length === 0 && alphaVantageItems.length === 0 && macroCommodityItems.length === 0) {
     lines.push("- No macro dashboard data available.");
     return lines;
   }
@@ -421,6 +424,41 @@ function renderMacroDashboardSection(input: RenderReportInput): string[] {
     }
   } else {
     lines.push("- No macro series observations available.");
+  }
+
+  if (alphaVantageItems.length > 0) {
+    lines.push("");
+    lines.push("### Major Indices (Alpha Vantage)");
+    lines.push(`- Instruments tracked: ${alphaVantageItems.length}`);
+    lines.push("");
+    lines.push(
+      buildMarkdownTableRow([
+        "Instrument",
+        "Price",
+        "Currency",
+        "24h",
+        "7d",
+        "Volume 24h",
+        "Provider",
+        "Captured At",
+      ]),
+    );
+    lines.push(buildMarkdownTableRow(["---", "---", "---", "---", "---", "---", "---", "---"]));
+
+    for (const item of alphaVantageItems) {
+      lines.push(
+        buildMarkdownTableRow([
+          item.instrumentId,
+          item.currentPrice.toFixed(2),
+          item.currency.toUpperCase(),
+          formatPct(item.return24hPct),
+          formatPct(item.return7dPct),
+          item.volume24h === undefined ? "N/A" : String(Math.round(item.volume24h)),
+          item.provider,
+          item.capturedAt,
+        ]),
+      );
+    }
   }
 
   if (macroCommodityItems.length > 0) {

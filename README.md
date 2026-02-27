@@ -288,6 +288,7 @@ Core vars:
 - `REPORTS_DIR` (default: `reports`)
 - `RUN_LOG_PATH` (default: `logs/runs.jsonl`, must end with `.jsonl`)
 - `FRED_API_KEY` (optional, recommended)
+- `ALPHA_VANTAGE_API_KEY` (optional)
 - `COINGECKO_API_KEY` (optional)
 - `HYPERLIQUID_DEX` (optional)
 
@@ -317,7 +318,7 @@ File: `config/rss-feeds.md`
 File: `config/watchlist.json`
 
 - enable/disable instruments (`enabled`)
-- supported providers: `coingecko`, `hyperliquid`
+- supported providers: `alphavantage`, `coingecko`, `hyperliquid`
 
 ### Skills
 

@@ -22,6 +22,7 @@ import { renderMarketReportMarkdown } from "../report/markdown-renderer";
 import { writeMarketReportFile } from "../report/report-writer";
 import { readFeedCatalogFile } from "../config/feed-catalog";
 import { readWatchlistFile } from "../config/watchlist";
+import { createAlphaVantageClient } from "../market/alphavantage-client";
 import { deduplicateNews } from "../ingest/deduplicate-news";
 import { fetchRssFeeds } from "../ingest/rss-fetch";
 import { parseRssEntries } from "../ingest/rss-parse";
@@ -433,6 +434,10 @@ export async function runReviewService(
     });
 
     const providers = createProviderRegistry({
+      alphavantage: createAlphaVantageClient({
+        fetchFn: options.fetchFn,
+        apiKey: context.env.alphaVantageApiKey,
+      }),
       coingecko: createCoinGeckoClient({
         fetchFn: options.fetchFn,
         apiKey: context.env.coingeckoApiKey,
@@ -674,6 +679,7 @@ export async function runReviewService(
       status: reportStatus,
       dataSources: [
         "RSS",
+        ...(marketProviders.has("alphavantage") ? ["Alpha Vantage"] : []),
         "CoinGecko",
         ...(marketProviders.has("hyperliquid") ? ["Hyperliquid"] : []),
         "FRED",

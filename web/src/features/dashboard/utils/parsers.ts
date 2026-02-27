@@ -147,22 +147,33 @@ export function isCryptoSnapshotRow(row: Record<string, unknown>): boolean {
   return !isMacroCommoditySnapshotRow(row);
 }
 
+export function isIndexSnapshotRow(row: Record<string, unknown>): boolean {
+  const provider = asString(row.provider)?.toLowerCase() ?? "";
+  return provider.includes("alphavantage");
+}
+
 export function splitMarketSnapshotRows(state?: LiveRunState): {
   all: Array<Record<string, unknown>>;
   crypto: Array<Record<string, unknown>>;
+  indexes: Array<Record<string, unknown>>;
   commodities: Array<Record<string, unknown>>;
   other: Array<Record<string, unknown>>;
 } {
   const rows = getMarketSnapshotPayload(state?.sections.marketSnapshot);
   const commodityRows = rows.filter(isMacroCommoditySnapshotRow);
   const cryptoRows = rows.filter(isCryptoSnapshotRow);
+  const indexRows = rows.filter(isIndexSnapshotRow);
   const otherRows = rows.filter(
-    (row) => !isMacroCommoditySnapshotRow(row) && !isCryptoSnapshotRow(row),
+    (row) =>
+      !isMacroCommoditySnapshotRow(row) &&
+      !isCryptoSnapshotRow(row) &&
+      !isIndexSnapshotRow(row),
   );
 
   return {
     all: rows,
     crypto: cryptoRows,
+    indexes: indexRows,
     commodities: commodityRows,
     other: otherRows,
   };

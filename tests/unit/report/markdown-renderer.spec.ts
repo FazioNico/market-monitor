@@ -224,14 +224,24 @@ describe("markdown renderer", () => {
     expect(markdown.trimEnd().endsWith("…")).toBe(false);
   });
 
-  it("renders Hyperliquid macro commodities under Macro Dashboard and excludes them from Crypto Dashboard", () => {
+  it("renders Alpha Vantage indices and Hyperliquid macro commodities under Macro Dashboard and excludes commodities from Crypto Dashboard", () => {
     const markdown = renderMarketReportMarkdown({
       generatedAt: "2026-02-25T10:00:00.000Z",
       status: "complete",
       triggerType: "manual",
-      dataSources: ["RSS", "CoinGecko", "FRED", "Hyperliquid"],
+      dataSources: ["RSS", "Alpha Vantage", "CoinGecko", "FRED", "Hyperliquid"],
       newsItems: [],
       marketSnapshot: [
+        {
+          instrumentId: "spy-usd",
+          capturedAt: "2026-02-25T10:00:00.000Z",
+          currentPrice: 610,
+          return24hPct: 0.6,
+          return7dPct: 2.2,
+          volume24h: 70000000,
+          currency: "usd",
+          provider: "alphavantage",
+        },
         {
           instrumentId: "btc-usd",
           capturedAt: "2026-02-25T10:00:00.000Z",
@@ -329,6 +339,8 @@ describe("markdown renderer", () => {
     const macroSection = markdown.slice(macroStart, cryptoStart);
     const cryptoSection = markdown.slice(cryptoStart, flowStart);
 
+    expect(macroSection).toContain("### Major Indices (Alpha Vantage)");
+    expect(macroSection).toContain("spy-usd");
     expect(macroSection).toContain("### Macro Commodities (Hyperliquid)");
     expect(macroSection).toContain("gold-usdc");
     expect(macroSection).toContain("silver-usdc");

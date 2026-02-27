@@ -263,7 +263,6 @@ function MarketSnapshotTable({
               <th className="px-3 py-2">Price</th>
               <th className="px-3 py-2">24h</th>
               <th className="px-3 py-2">7d</th>
-              <th className="px-3 py-2">Provider</th>
             </tr>
           </thead>
           <tbody>
@@ -312,9 +311,6 @@ function MarketSnapshotTable({
                     )}
                   >
                     {ret7d !== undefined ? `${ret7d.toFixed(2)}%` : "n/a"}
-                  </td>
-                  <td className="px-3 py-2.5 text-zinc-400">
-                    {String(row.provider ?? "n/a")}
                   </td>
                 </tr>
               );
@@ -365,6 +361,30 @@ export function CommoditiesSnapshotCard({ state }: { state?: LiveRunState }) {
           title="Commodities"
           subtitle="Macro commodity instruments"
           rows={commodities}
+        />
+      )}
+    </Panel>
+  );
+}
+
+export function IndexesSnapshotCard({ state }: { state?: LiveRunState }) {
+  const { all, indexes } = splitMarketSnapshotRows(state);
+  return (
+    <Panel
+      title="Indexes Snapshot"
+      subtitle="Alpha Vantage Indexes Instruments"
+    >
+      {all.length === 0 ? (
+        <div className="text-sm text-zinc-400">Waiting for market data.</div>
+      ) : indexes.length === 0 ? (
+        <div className="text-sm text-zinc-400">
+          No index rows available for this run.
+        </div>
+      ) : (
+        <MarketSnapshotTable
+          title="Indexes"
+          subtitle="Alpha Vantage Indexes Instruments"
+          rows={indexes}
         />
       )}
     </Panel>

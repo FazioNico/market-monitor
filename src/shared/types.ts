@@ -28,6 +28,7 @@ export interface AppEnv {
   reportsDir: string;
   runLogPath: string;
   fredApiKey?: string;
+  alphaVantageApiKey?: string;
   coingeckoApiKey?: string;
   hyperliquidDex?: string;
   llmProvider?: LlmProvider;

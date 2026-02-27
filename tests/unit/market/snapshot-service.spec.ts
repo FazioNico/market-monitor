@@ -3,9 +3,19 @@ import { describe, expect, it } from "vitest";
 import { buildMarketSnapshot } from "../../../src/market/snapshot-service";
 
 describe("snapshot service", () => {
-  it("combines snapshots returned by coingecko and hyperliquid providers", async () => {
+  it("combines snapshots returned by alphavantage, coingecko, and hyperliquid providers", async () => {
     const snapshots = await buildMarketSnapshot(
       [
+        {
+          id: "spy-usd",
+          symbol: "SPY",
+          name: "SPDR S&P 500 ETF Trust",
+          assetClass: "index",
+          provider: "alphavantage",
+          providerKey: "SPY",
+          volumeRelevant: true,
+          enabled: true,
+        },
         {
           id: "btc-usd",
           symbol: "BTC",
@@ -28,6 +38,17 @@ describe("snapshot service", () => {
         },
       ],
       {
+        alphavantage: {
+          fetchMarketSnapshots: async () => [{
+            instrumentId: "spy-usd",
+            capturedAt: "2026-02-23T08:10:00.000Z",
+            currentPrice: 610,
+            return24hPct: 0.7,
+            return7dPct: 2.1,
+            currency: "usd",
+            provider: "alphavantage",
+          }],
+        },
         coingecko: {
           fetchMarketSnapshots: async () => [{
             instrumentId: "btc-usd",
@@ -53,8 +74,9 @@ describe("snapshot service", () => {
       } as any,
     );
 
-    expect(snapshots).toHaveLength(2);
-    expect(snapshots[0]?.instrumentId).toBe("btc-usd");
-    expect(snapshots[1]?.instrumentId).toBe("gold-usdc");
+    expect(snapshots).toHaveLength(3);
+    expect(snapshots[0]?.instrumentId).toBe("spy-usd");
+    expect(snapshots[1]?.instrumentId).toBe("btc-usd");
+    expect(snapshots[2]?.instrumentId).toBe("gold-usdc");
   });
 });

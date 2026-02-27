@@ -22,6 +22,8 @@ import { cx } from "../utils/guards";
 import {
   CommoditiesSnapshotCard,
   CryptoSnapshotCard,
+  DefiDexVolumeCard,
+  DefiTvlCard,
   EtfFlowsCard,
   IndexesSnapshotCard,
   MacroContextCard,
@@ -440,17 +442,15 @@ export function ReportDeskContainer() {
             ) : null}
 
             {activeView === "onchain" ? (
-              <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
+              <div className="grid items-start gap-4 xl:grid-cols-2 2xl:grid-cols-3">
                 <RevealIn delayMs={0}>
                   <StablecoinSupplyCard state={liveRunState} />
                 </RevealIn>
                 <RevealIn delayMs={60}>
-                  <JsonSectionCard
-                    title="On-Chain Payload"
-                    subtitle="Raw stablecoin supply section payload"
-                    payload={liveRunState?.sections.stablecoinSupply}
-                    maxHeight="max-h-72"
-                  />
+                  <DefiTvlCard state={liveRunState} />
+                </RevealIn>
+                <RevealIn delayMs={120}>
+                  <DefiDexVolumeCard state={liveRunState} />
                 </RevealIn>
               </div>
             ) : null}

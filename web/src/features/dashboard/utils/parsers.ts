@@ -4,6 +4,8 @@ import type {
   RunReviewServiceEvent,
 } from "../../../types";
 import type {
+  DefiDexVolumeSectionPayload,
+  DefiTvlSectionPayload,
   EtfFlowUiDataset,
   EtfFlowUiRow,
   EtfFlowsSectionPayload,
@@ -126,6 +128,62 @@ export function getStablecoinSupplyPayload(
       change7dPct: asNumber(value.snapshot.change7dPct),
       reference24hAt: asString(value.snapshot.reference24hAt),
       reference7dAt: asString(value.snapshot.reference7dAt),
+    };
+  }
+
+  return {
+    available: asBoolean(value.available),
+    error: asString(value.error),
+    snapshot,
+  };
+}
+
+export function getDefiTvlPayload(
+  value: unknown,
+): DefiTvlSectionPayload | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  let snapshot: DefiTvlSectionPayload["snapshot"];
+  if (isRecord(value.snapshot)) {
+    snapshot = {
+      source: asString(value.snapshot.source),
+      capturedAt: asString(value.snapshot.capturedAt),
+      currentTvlUsd: asNumber(value.snapshot.currentTvlUsd),
+      change24hUsd: asNumber(value.snapshot.change24hUsd),
+      change7dUsd: asNumber(value.snapshot.change7dUsd),
+      change24hPct: asNumber(value.snapshot.change24hPct),
+      change7dPct: asNumber(value.snapshot.change7dPct),
+      reference24hAt: asString(value.snapshot.reference24hAt),
+      reference7dAt: asString(value.snapshot.reference7dAt),
+    };
+  }
+
+  return {
+    available: asBoolean(value.available),
+    error: asString(value.error),
+    snapshot,
+  };
+}
+
+export function getDefiDexVolumePayload(
+  value: unknown,
+): DefiDexVolumeSectionPayload | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  let snapshot: DefiDexVolumeSectionPayload["snapshot"];
+  if (isRecord(value.snapshot)) {
+    snapshot = {
+      source: asString(value.snapshot.source),
+      capturedAt: asString(value.snapshot.capturedAt),
+      currentVolume24hUsd: asNumber(value.snapshot.currentVolume24hUsd),
+      change24hUsd: asNumber(value.snapshot.change24hUsd),
+      change7dUsd: asNumber(value.snapshot.change7dUsd),
+      change24hPct: asNumber(value.snapshot.change24hPct),
+      change7dPct: asNumber(value.snapshot.change7dPct),
     };
   }
 

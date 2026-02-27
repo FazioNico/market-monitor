@@ -9,6 +9,8 @@ import type {
 import { ValidationError } from "../shared/errors";
 import type {
   AppEnv,
+  DefiDexVolumeSnapshot,
+  DefiTvlSnapshot,
   EtfFlowSnapshot,
   MacroSeriesObservation,
   MarketSnapshotItem,
@@ -28,7 +30,9 @@ import { deduplicateNews } from "../ingest/deduplicate-news";
 import { fetchRssFeeds } from "../ingest/rss-fetch";
 import { parseRssEntries } from "../ingest/rss-parse";
 import { createCoinGeckoClient } from "../market/coingecko-client";
+import { createDefiLlamaDexVolumeClient } from "../market/defillama-dex-volume-client";
 import { createDefiLlamaStablecoinsClient } from "../market/defillama-stablecoins-client";
+import { createDefiLlamaTvlClient } from "../market/defillama-tvl-client";
 import { createFarsideEtfClient } from "../market/farside-etf-client";
 import { createFredClient } from "../market/fred-client";
 import { createHyperliquidClient } from "../market/hyperliquid-client";
@@ -459,11 +463,19 @@ export async function runReviewService(
     const defiLlamaStablecoinsClient = createDefiLlamaStablecoinsClient({
       fetchFn: options.fetchFn,
     });
+    const defiLlamaTvlClient = createDefiLlamaTvlClient({
+      fetchFn: options.fetchFn,
+    });
+    const defiLlamaDexVolumeClient = createDefiLlamaDexVolumeClient({
+      fetchFn: options.fetchFn,
+    });
 
     let etfFlowsError: string | undefined;
     let stablecoinSupplyError: string | undefined;
+    let defiTvlError: string | undefined;
+    let dexVolumeError: string | undefined;
     await emitStageStarted("fetch_market_macro");
-    const [marketSnapshot, macroContext, etfFlowsResult, stablecoinSupplyResult] = await Promise.all([
+    const [marketSnapshot, macroContext, etfFlowsResult, stablecoinSupplyResult, defiTvlResult, dexVolumeResult] = await Promise.all([
       buildMarketSnapshot(watchlist.instruments as WatchlistInstrument[], providers),
       fetchMacroSeriesContext(providers),
       farsideEtfClient
@@ -474,11 +486,21 @@ export async function runReviewService(
         .fetchStablecoinSupplySnapshot()
         .then((value) => ({ ok: true as const, value }))
         .catch((error) => ({ ok: false as const, error })),
+      defiLlamaTvlClient
+        .fetchDefiTvlSnapshot()
+        .then((value) => ({ ok: true as const, value }))
+        .catch((error) => ({ ok: false as const, error })),
+      defiLlamaDexVolumeClient
+        .fetchDexVolumeSnapshot()
+        .then((value) => ({ ok: true as const, value }))
+        .catch((error) => ({ ok: false as const, error })),
     ]);
     const etfFlows: EtfFlowSnapshot | undefined = etfFlowsResult.ok ? etfFlowsResult.value : undefined;
     const stablecoinSupply: StablecoinSupplySnapshot | undefined = stablecoinSupplyResult.ok
       ? stablecoinSupplyResult.value
       : undefined;
+    const defiTvl: DefiTvlSnapshot | undefined = defiTvlResult.ok ? defiTvlResult.value : undefined;
+    const dexVolume: DefiDexVolumeSnapshot | undefined = dexVolumeResult.ok ? dexVolumeResult.value : undefined;
     if (!etfFlowsResult.ok) {
       etfFlowsError = describeLlmError(etfFlowsResult.error);
       await emitLog("error", `ETF flow scraping failure (Farside): ${etfFlowsError}`);
@@ -487,11 +509,29 @@ export async function runReviewService(
       stablecoinSupplyError = describeLlmError(stablecoinSupplyResult.error);
       await emitLog("warn", `On-chain stablecoin supply fetch failure (DefiLlama): ${stablecoinSupplyError}`);
     }
+    if (!defiTvlResult.ok) {
+      defiTvlError = describeLlmError(defiTvlResult.error);
+      await emitLog("warn", `On-chain TVL fetch failure (DefiLlama): ${defiTvlError}`);
+    }
+    if (!dexVolumeResult.ok) {
+      dexVolumeError = describeLlmError(dexVolumeResult.error);
+      await emitLog("warn", `On-chain DEX volume fetch failure (DefiLlama): ${dexVolumeError}`);
+    }
     await emitSection("marketSnapshot", marketSnapshot);
     await emitSection("stablecoinSupply", {
       available: Boolean(stablecoinSupply),
       error: stablecoinSupplyError ?? null,
       snapshot: stablecoinSupply ?? null,
+    });
+    await emitSection("defiTvl", {
+      available: Boolean(defiTvl),
+      error: defiTvlError ?? null,
+      snapshot: defiTvl ?? null,
+    });
+    await emitSection("dexVolume", {
+      available: Boolean(dexVolume),
+      error: dexVolumeError ?? null,
+      snapshot: dexVolume ?? null,
     });
     await emitSection("macroContext", macroContext);
     await emitSection("etfFlows", {
@@ -502,6 +542,8 @@ export async function runReviewService(
     await emitStageCompleted("fetch_market_macro", {
       marketSnapshot: marketSnapshot.length,
       stablecoinSupply: stablecoinSupply ? 1 : 0,
+      defiTvl: defiTvl ? 1 : 0,
+      dexVolume: dexVolume ? 1 : 0,
       macroContext: macroContext.length,
       etfDatasets: etfFlows?.datasets.length ?? 0,
     });
@@ -705,7 +747,7 @@ export async function runReviewService(
         ...(marketProviders.has("alphavantage") ? ["Alpha Vantage"] : []),
         "CoinGecko",
         ...(marketProviders.has("hyperliquid") ? ["Hyperliquid"] : []),
-        ...(stablecoinSupply ? ["DefiLlama"] : []),
+        ...(stablecoinSupply || defiTvl || dexVolume ? ["DefiLlama"] : []),
         "FRED",
         ...(etfFlows ? ["Farside"] : []),
       ],
@@ -716,6 +758,8 @@ export async function runReviewService(
       `Feeds processed: ${feedCatalog.entries.length}`,
       `Watchlist enabled: ${watchlist.instruments.length}`,
       `Stablecoin supply available: ${stablecoinSupply ? "yes" : "no"}`,
+      `DeFi TVL available: ${defiTvl ? "yes" : "no"}`,
+      `DEX volume available: ${dexVolume ? "yes" : "no"}`,
       `ETF flow datasets: ${etfFlows?.datasets.length ?? 0}`,
       ...(etfFlows
         ? etfFlows.datasets.map(
@@ -733,6 +777,8 @@ export async function runReviewService(
         ? [`Top article summary enrichment error: ${topArticlesSummaryEnrichmentError}`]
         : []),
       ...(stablecoinSupplyError ? [`Stablecoin supply error (DefiLlama): ${stablecoinSupplyError}`] : []),
+      ...(defiTvlError ? [`DeFi TVL error (DefiLlama): ${defiTvlError}`] : []),
+      ...(dexVolumeError ? [`DEX volume error (DefiLlama): ${dexVolumeError}`] : []),
       ...(etfFlowsError ? [`ETF flow scraping error (Farside): ${etfFlowsError}`] : []),
     ];
     await emitSection("diagnostics", diagnostics);

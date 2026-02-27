@@ -108,3 +108,33 @@ export type StablecoinSupplySectionPayload = {
     reference7dAt?: string;
   };
 };
+
+export type DefiTvlSectionPayload = {
+  available?: boolean;
+  error?: string;
+  snapshot?: {
+    source?: string;
+    capturedAt?: string;
+    currentTvlUsd?: number;
+    change24hUsd?: number;
+    change7dUsd?: number;
+    change24hPct?: number;
+    change7dPct?: number;
+    reference24hAt?: string;
+    reference7dAt?: string;
+  };
+};
+
+export type DefiDexVolumeSectionPayload = {
+  available?: boolean;
+  error?: string;
+  snapshot?: {
+    source?: string;
+    capturedAt?: string;
+    currentVolume24hUsd?: number;
+    change24hUsd?: number;
+    change7dUsd?: number;
+    change24hPct?: number;
+    change7dPct?: number;
+  };
+};

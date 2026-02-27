@@ -152,6 +152,28 @@ export interface StablecoinSupplySnapshot {
   reference7dAt?: string;
 }
 
+export interface DefiTvlSnapshot {
+  source: "defillama";
+  capturedAt: string;
+  currentTvlUsd: number;
+  change24hUsd?: number;
+  change7dUsd?: number;
+  change24hPct?: number;
+  change7dPct?: number;
+  reference24hAt?: string;
+  reference7dAt?: string;
+}
+
+export interface DefiDexVolumeSnapshot {
+  source: "defillama";
+  capturedAt: string;
+  currentVolume24hUsd: number;
+  change24hUsd?: number;
+  change7dUsd?: number;
+  change24hPct?: number;
+  change7dPct?: number;
+}
+
 export interface RegimeAssessment {
   label: "risk_on" | "risk_off" | "transition";
   dispersionSignal: string;

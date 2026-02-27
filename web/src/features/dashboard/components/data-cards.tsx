@@ -9,6 +9,8 @@ import {
 import { asArray, asString, cx, isRecord } from "../utils/guards";
 import {
   computeRecentEtfCumulative,
+  getDefiDexVolumePayload,
+  getDefiTvlPayload,
   getEtfFlowsPayload,
   getEtfRowTotalNetFlowUsdM,
   getMacroPayload,
@@ -250,8 +252,11 @@ function formatUsdCompact(value?: number): string {
 
   const abs = Math.abs(value);
   const sign = value > 0 ? "+" : value < 0 ? "-" : "";
+  if (abs >= 1_000_000_000_000) {
+    return `${sign}$${(abs / 1_000_000_000_000).toFixed(abs >= 10_000_000_000_000 ? 1 : 2)}T`;
+  }
   if (abs >= 1_000_000_000) {
-    return `${sign}$${(abs / 1_000_000_000).toFixed(2)}B`;
+    return `${sign}$${(abs / 1_000_000_000).toFixed(abs >= 100_000_000_000 ? 1 : 2)}B`;
   }
   if (abs >= 1_000_000) {
     return `${sign}$${(abs / 1_000_000).toFixed(1)}M`;
@@ -264,6 +269,46 @@ function formatPctCompact(value?: number): string {
     return "N/A";
   }
   return `${value >= 0 ? "+" : ""}${value.toFixed(2)}%`;
+}
+
+function OnChainMetricTile({
+  label,
+  value,
+  detail,
+}: {
+  label: string;
+  value: string;
+  detail?: string;
+}) {
+  return (
+    <div className="min-w-0 rounded-xl border border-white/10 bg-white/[0.02] p-3">
+      <div className="text-[11px] uppercase tracking-[0.16em] text-zinc-400">
+        {label}
+      </div>
+      <div className="mt-2 min-w-0 break-words font-mono text-[clamp(1rem,2vw,1.35rem)] font-semibold leading-tight text-zinc-100">
+        {value}
+      </div>
+      {detail ? (
+        <div className="mt-1 text-xs text-zinc-400">{detail}</div>
+      ) : null}
+    </div>
+  );
+}
+
+function OnChainMetaBlock({
+  lines,
+}: {
+  lines: string[];
+}) {
+  return (
+    <div className="rounded-xl border border-white/10 bg-black/20 p-3 text-xs text-zinc-400">
+      <div className="space-y-1">
+        {lines.map((line) => (
+          <div key={line}>{line}</div>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 function MarketSnapshotTable({
@@ -451,46 +496,134 @@ export function StablecoinSupplyCard({ state }: { state?: LiveRunState }) {
         </div>
       ) : (
         <div className="space-y-4">
-          <div className="grid gap-3 md:grid-cols-3">
-            <div className="rounded-xl border border-white/10 bg-white/[0.02] p-3">
-              <div className="text-xs uppercase tracking-[0.16em] text-zinc-400">
-                Total Supply
-              </div>
-              <div className="mt-2 text-xl font-semibold text-zinc-100">
-                {formatUsdCompact(snapshot.currentSupplyUsd)}
-              </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="sm:col-span-2">
+              <OnChainMetricTile
+                label="Total Supply"
+                value={formatUsdCompact(snapshot.currentSupplyUsd)}
+              />
             </div>
-            <div className="rounded-xl border border-white/10 bg-white/[0.02] p-3">
-              <div className="text-xs uppercase tracking-[0.16em] text-zinc-400">
-                24h Change
-              </div>
-              <div className="mt-2 text-xl font-semibold text-zinc-100">
-                {formatUsdCompact(snapshot.change24hUsd)}
-              </div>
-              <div className="mt-1 text-xs text-zinc-400">
-                {formatPctCompact(snapshot.change24hPct)}
-              </div>
-            </div>
-            <div className="rounded-xl border border-white/10 bg-white/[0.02] p-3">
-              <div className="text-xs uppercase tracking-[0.16em] text-zinc-400">
-                7d Change
-              </div>
-              <div className="mt-2 text-xl font-semibold text-zinc-100">
-                {formatUsdCompact(snapshot.change7dUsd)}
-              </div>
-              <div className="mt-1 text-xs text-zinc-400">
-                {formatPctCompact(snapshot.change7dPct)}
-              </div>
-            </div>
+            <OnChainMetricTile
+              label="24h Change"
+              value={formatUsdCompact(snapshot.change24hUsd)}
+              detail={formatPctCompact(snapshot.change24hPct)}
+            />
+            <OnChainMetricTile
+              label="7d Change"
+              value={formatUsdCompact(snapshot.change7dUsd)}
+              detail={formatPctCompact(snapshot.change7dPct)}
+            />
           </div>
-          <div className="rounded-xl border border-white/10 bg-black/20 p-3 text-xs text-zinc-400">
-            <div>Captured: {formatDateTime(snapshot.capturedAt)}</div>
-            <div>24h reference: {formatDateTime(snapshot.reference24hAt)}</div>
-            <div>7d reference: {formatDateTime(snapshot.reference7dAt)}</div>
-            <div className="mt-2">
-              Source: {snapshot.source ?? "defillama"}
+          <OnChainMetaBlock
+            lines={[
+              `Captured: ${formatDateTime(snapshot.capturedAt)}`,
+              `24h reference: ${formatDateTime(snapshot.reference24hAt)}`,
+              `7d reference: ${formatDateTime(snapshot.reference7dAt)}`,
+              `Source: ${snapshot.source ?? "defillama"}`,
+            ]}
+          />
+        </div>
+      )}
+    </Panel>
+  );
+}
+
+export function DefiTvlCard({ state }: { state?: LiveRunState }) {
+  const payload = getDefiTvlPayload(state?.sections.defiTvl);
+  const snapshot = payload?.snapshot;
+
+  return (
+    <Panel
+      title="Total Value Locked Snapshot"
+      subtitle="DefiLlama total DeFi TVL deltas"
+    >
+      {!payload ? (
+        <div className="text-sm text-zinc-400">Waiting for on-chain data.</div>
+      ) : !payload.available || !snapshot ? (
+        <div className="rounded-xl border border-white/10 bg-white/[0.02] p-3 text-sm text-zinc-300">
+          <div>No TVL snapshot available for this run.</div>
+          {payload.error ? (
+            <div className="mt-2 text-xs text-amber-200">{payload.error}</div>
+          ) : null}
+        </div>
+      ) : (
+        <div className="space-y-4">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="sm:col-span-2">
+              <OnChainMetricTile
+                label="Total TVL"
+                value={formatUsdCompact(snapshot.currentTvlUsd)}
+              />
             </div>
+            <OnChainMetricTile
+              label="24h Change"
+              value={formatUsdCompact(snapshot.change24hUsd)}
+              detail={formatPctCompact(snapshot.change24hPct)}
+            />
+            <OnChainMetricTile
+              label="7d Change"
+              value={formatUsdCompact(snapshot.change7dUsd)}
+              detail={formatPctCompact(snapshot.change7dPct)}
+            />
           </div>
+          <OnChainMetaBlock
+            lines={[
+              `Captured: ${formatDateTime(snapshot.capturedAt)}`,
+              `24h reference: ${formatDateTime(snapshot.reference24hAt)}`,
+              `7d reference: ${formatDateTime(snapshot.reference7dAt)}`,
+              `Source: ${snapshot.source ?? "defillama"}`,
+            ]}
+          />
+        </div>
+      )}
+    </Panel>
+  );
+}
+
+export function DefiDexVolumeCard({ state }: { state?: LiveRunState }) {
+  const payload = getDefiDexVolumePayload(state?.sections.dexVolume);
+  const snapshot = payload?.snapshot;
+
+  return (
+    <Panel
+      title="DEX Volume Snapshot"
+      subtitle="DefiLlama aggregate DEX volume deltas"
+    >
+      {!payload ? (
+        <div className="text-sm text-zinc-400">Waiting for on-chain data.</div>
+      ) : !payload.available || !snapshot ? (
+        <div className="rounded-xl border border-white/10 bg-white/[0.02] p-3 text-sm text-zinc-300">
+          <div>No DEX volume snapshot available for this run.</div>
+          {payload.error ? (
+            <div className="mt-2 text-xs text-amber-200">{payload.error}</div>
+          ) : null}
+        </div>
+      ) : (
+        <div className="space-y-4">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="sm:col-span-2">
+              <OnChainMetricTile
+                label="24h Volume"
+                value={formatUsdCompact(snapshot.currentVolume24hUsd)}
+              />
+            </div>
+            <OnChainMetricTile
+              label="24h Change"
+              value={formatUsdCompact(snapshot.change24hUsd)}
+              detail={formatPctCompact(snapshot.change24hPct)}
+            />
+            <OnChainMetricTile
+              label="7d Change"
+              value={formatUsdCompact(snapshot.change7dUsd)}
+              detail={formatPctCompact(snapshot.change7dPct)}
+            />
+          </div>
+          <OnChainMetaBlock
+            lines={[
+              `Captured: ${formatDateTime(snapshot.capturedAt)}`,
+              `Source: ${snapshot.source ?? "defillama"}`,
+            ]}
+          />
         </div>
       )}
     </Panel>

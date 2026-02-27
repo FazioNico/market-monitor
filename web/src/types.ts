@@ -38,6 +38,8 @@ export type RunReviewSectionKey =
   | "news"
   | "marketSnapshot"
   | "stablecoinSupply"
+  | "defiTvl"
+  | "dexVolume"
   | "macroContext"
   | "etfFlows"
   | "regime"

@@ -383,18 +383,39 @@ export async function runReviewService(
       lookbackHours: feedCatalog.effectiveLookbackHours,
     });
 
-    const parsedNewsByFeed: NormalizedNewsItem[][] = rssResponses.map((response) =>
-      parseRssEntries(response.xml, {
-        source: response.feed.source,
-        category: response.feed.category,
-        ingestedAt: response.fetchedAt,
-      }).filter((item) => {
-        const published = new Date(item.publishedAt).getTime();
-        const cutoff = baseDate.getTime() - feedCatalog.effectiveLookbackHours * 60 * 60 * 1000;
-        return published >= cutoff;
-      }),
-    );
+    const rssParseErrors: Array<{
+      source: string;
+      category: string;
+      message: string;
+    }> = [];
+    const parsedNewsByFeed: NormalizedNewsItem[][] = rssResponses.map((response) => {
+      try {
+        return parseRssEntries(response.xml, {
+          source: response.feed.source,
+          category: response.feed.category,
+          ingestedAt: response.fetchedAt,
+        }).filter((item) => {
+          const published = new Date(item.publishedAt).getTime();
+          const cutoff = baseDate.getTime() - feedCatalog.effectiveLookbackHours * 60 * 60 * 1000;
+          return published >= cutoff;
+        });
+      } catch (error) {
+        const message = describeLlmError(error);
+        rssParseErrors.push({
+          source: response.feed.source,
+          category: response.feed.category,
+          message,
+        });
+        return [];
+      }
+    });
     const newsItems: NewsItem[] = deduplicateNews(flatten(parsedNewsByFeed));
+    for (const rssParseError of rssParseErrors) {
+      await emitLog(
+        "warn",
+        `RSS parse skipped for ${rssParseError.source}/${rssParseError.category}: ${rssParseError.message}`,
+      );
+    }
     await emitSection("news", {
       ...summarizeNewsForUi(newsItems),
       byFeed: rssResponses.map((response, index) => ({
@@ -403,9 +424,11 @@ export async function runReviewService(
         fetchedAt: response.fetchedAt,
         parsedItems: parsedNewsByFeed[index]?.length ?? 0,
       })),
+      parseErrors: rssParseErrors,
     });
     await emitStageCompleted("fetch_rss", {
       feedsFetched: rssResponses.length,
+      feedsSkipped: rssParseErrors.length,
       newsItems: newsItems.length,
     });
 

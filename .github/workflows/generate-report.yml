@@ -106,8 +106,15 @@ jobs:
             git worktree add "$TARGET_DIR" "$ARTIFACT_BRANCH"
           fi
 
-          rsync -a --delete "$SOURCE_REPORTS"/ "$TARGET_DIR/reports/"
-          rsync -a --delete "$SOURCE_LOGS"/ "$TARGET_DIR/logs/"
+          # Keep full history on artifact branch: copy new/updated files only.
+          rsync -a "$SOURCE_REPORTS"/ "$TARGET_DIR/reports/"
+
+          # Preserve cumulative runs history instead of overwriting with the current run file.
+          if [ -f "$SOURCE_LOGS/runs.jsonl" ]; then
+            mkdir -p "$TARGET_DIR/logs"
+            touch "$TARGET_DIR/logs/runs.jsonl"
+            cat "$SOURCE_LOGS/runs.jsonl" >> "$TARGET_DIR/logs/runs.jsonl"
+          fi
 
           (
             cd "$TARGET_DIR"

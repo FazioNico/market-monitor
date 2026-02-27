@@ -24,6 +24,7 @@ import {
   CryptoSnapshotCard,
   EtfFlowsCard,
   MacroContextCard,
+  NewsSourcesCard,
   OtherMarketSnapshotCard,
   TopArticlesCard,
 } from "../components/data-cards";
@@ -401,6 +402,7 @@ export function ReportDeskContainer() {
                   <TopArticlesCard state={liveRunState} />
                 </RevealIn>
                 <RevealIn delayMs={60} className="min-w-0 space-y-4">
+                  <NewsSourcesCard state={liveRunState} />
                   <JsonSectionCard
                     title="News Intake"
                     subtitle="RSS ingestion summary"

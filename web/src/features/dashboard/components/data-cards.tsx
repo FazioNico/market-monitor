@@ -6,7 +6,7 @@ import {
   formatEtfAssetLabel,
   formatUsdMillions,
 } from "../utils/formatters";
-import { cx } from "../utils/guards";
+import { asArray, asString, cx, isRecord } from "../utils/guards";
 import {
   computeRecentEtfCumulative,
   getEtfFlowsPayload,
@@ -158,6 +158,88 @@ export function TopArticlesCard({ state }: { state?: LiveRunState }) {
       )}
     </Panel>
   );
+}
+
+export function NewsSourcesCard({ state }: { state?: LiveRunState }) {
+  const sources = getNewsSourceSummaries(state);
+
+  return (
+    <Panel
+      title="News Sources"
+      subtitle="Sources represented in the current RSS intake"
+      actions={
+        <div className="data-pill gap-2">
+          <span className="font-mono text-[11px]">{sources.length}</span>
+          <span className="text-zinc-400">sources</span>
+        </div>
+      }
+    >
+      {sources.length === 0 ? (
+        <div className="text-sm text-zinc-400">No source data yet.</div>
+      ) : (
+        <div className="flex flex-wrap gap-2">
+          {sources.map((source) => (
+            <div
+              key={source.name}
+              className="rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2"
+            >
+              <div className="text-sm font-medium text-zinc-100">{source.name}</div>
+              <div className="mt-1 text-xs text-zinc-400">
+                {source.articleCount} article{source.articleCount > 1 ? "s" : ""}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </Panel>
+  );
+}
+
+function getNewsSourceSummaries(
+  state?: LiveRunState,
+): Array<{ name: string; articleCount: number }> {
+  const section = state?.sections.news;
+  if (!isRecord(section)) {
+    return [];
+  }
+
+  const bySource = new Map<string, number>();
+  for (const feed of asArray(section.byFeed)) {
+    if (!isRecord(feed)) {
+      continue;
+    }
+    const source = asString(feed.source);
+    if (!source) {
+      continue;
+    }
+    const parsedItems =
+      typeof feed.parsedItems === "number" && Number.isFinite(feed.parsedItems)
+        ? feed.parsedItems
+        : 0;
+    bySource.set(source, (bySource.get(source) ?? 0) + parsedItems);
+  }
+
+  if (bySource.size === 0) {
+    for (const item of asArray(section.preview)) {
+      if (!isRecord(item)) {
+        continue;
+      }
+      const source = asString(item.source);
+      if (!source) {
+        continue;
+      }
+      bySource.set(source, (bySource.get(source) ?? 0) + 1);
+    }
+  }
+
+  return [...bySource.entries()]
+    .map(([name, articleCount]) => ({ name, articleCount }))
+    .sort((left, right) => {
+      if (right.articleCount !== left.articleCount) {
+        return right.articleCount - left.articleCount;
+      }
+      return left.name.localeCompare(right.name);
+    });
 }
 
 function MarketSnapshotTable({

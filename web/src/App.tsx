@@ -13,6 +13,17 @@ import type {
 const API_BASE =
   (import.meta.env.VITE_API_BASE_URL as string | undefined) ??
   "http://localhost:3001";
+const APP_MODE =
+  (import.meta.env.VITE_APP_MODE as string | undefined)?.toLowerCase() ??
+  "interactive";
+const IS_PUBLIC_READONLY = APP_MODE === "public";
+const PUBLIC_DATA_BASE_URL = (() => {
+  const configured = import.meta.env.VITE_PUBLIC_DATA_BASE_URL as
+    | string
+    | undefined;
+  const base = configured && configured.trim().length > 0 ? configured : import.meta.env.BASE_URL;
+  return base.endsWith("/") ? base : `${base}/`;
+})();
 const GITHUB_OWNER = "FazioNico";
 const GITHUB_REPO = "market-monitor";
 const GITHUB_DEFAULT_BRANCH_CANDIDATES = ["main", "master"] as const;
@@ -588,6 +599,109 @@ function downloadTextFile(filename: string, content: string, mimeType: string): 
   link.click();
   link.remove();
   URL.revokeObjectURL(objectUrl);
+}
+
+function parseRunListItemsFromJsonl(contents: string): RunListItem[] {
+  const latestByRunId = new Map<string, RunListItem>();
+  const lines = contents
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+
+  for (const line of lines) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (!isRecord(parsed)) {
+      continue;
+    }
+
+    const runId = asString(parsed.runId);
+    const triggerType = asString(parsed.triggerType) as TriggerType | undefined;
+    const startedAt = asString(parsed.startedAt);
+    const status = asString(parsed.status) as RunListItem["status"] | undefined;
+    if (!runId || !triggerType || !startedAt || !status) {
+      continue;
+    }
+
+    latestByRunId.set(runId, {
+      runId,
+      triggerType,
+      startedAt,
+      endedAt: asString(parsed.endedAt),
+      status,
+      reportStatus: asString(parsed.reportStatus) as
+        | RunListItem["reportStatus"]
+        | undefined,
+      reportFilePath: asString(parsed.reportFilePath),
+      llmStatus: asString(parsed.llmStatus) as RunListItem["llmStatus"] | undefined,
+      messages: asStringArray(parsed.messages),
+    });
+  }
+
+  return [...latestByRunId.values()].sort((a, b) => {
+    const aMs = new Date(a.startedAt).getTime();
+    const bMs = new Date(b.startedAt).getTime();
+    return bMs - aMs;
+  });
+}
+
+function buildPublicAssetUrl(path: string): string {
+  const normalizedPath = path.replace(/^\/+/, "");
+  return `${PUBLIC_DATA_BASE_URL}${normalizedPath}`;
+}
+
+function normalizeReportPath(reportFilePath: string): string {
+  if (reportFilePath.startsWith("reports/")) {
+    return reportFilePath;
+  }
+  const reportsSegment = "/reports/";
+  const reportsIndex = reportFilePath.lastIndexOf(reportsSegment);
+  if (reportsIndex >= 0) {
+    return reportFilePath.slice(reportsIndex + 1);
+  }
+  return reportFilePath.replace(/^\/+/, "");
+}
+
+function parseRunEventEnvelopesFromJsonl(
+  contents: string,
+): RunReviewEventEnvelope[] {
+  const lines = contents
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+  const envelopes: RunReviewEventEnvelope[] = [];
+
+  for (const line of lines) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (!isRecord(parsed) || !isRecord(parsed.event)) {
+      continue;
+    }
+
+    const id = asNumber(parsed.id);
+    const runId = asString(parsed.runId);
+    const sentAt = asString(parsed.sentAt);
+    if (id === undefined || !runId || !sentAt) {
+      continue;
+    }
+
+    envelopes.push({
+      id,
+      runId,
+      sentAt,
+      event: parsed.event as RunReviewServiceEvent,
+    });
+  }
+
+  return envelopes.sort((a, b) => a.id - b.id);
 }
 
 function getRegimePayload(value: unknown):
@@ -2596,10 +2710,28 @@ export default function App() {
   const [startingRun, setStartingRun] = useState(false);
   const [uiError, setUiError] = useState<string>();
   const [activityCompact, setActivityCompact] = useState(true);
+  const [reportMarkdownFromFile, setReportMarkdownFromFile] = useState<string>();
 
   async function refreshRuns(): Promise<void> {
     setRunsLoading(true);
     try {
+      if (IS_PUBLIC_READONLY) {
+        const response = await fetch(buildPublicAssetUrl("logs/runs.jsonl"), {
+          cache: "no-store",
+        });
+        if (!response.ok) {
+          throw new Error(`Unable to load public run history (HTTP ${response.status})`);
+        }
+        const content = await response.text();
+        const items = parseRunListItemsFromJsonl(content);
+        setRuns(items);
+        setActiveRunIds([]);
+        setSelectedRunId((current) => current ?? items[0]?.runId);
+        setConnectionState("closed");
+        setUiError(undefined);
+        return;
+      }
+
       const response = await fetch(`${API_BASE}/api/runs`);
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
@@ -2631,6 +2763,10 @@ export default function App() {
     dateOverride?: string;
     scheduleSlotKey?: string;
   }): Promise<void> {
+    if (IS_PUBLIC_READONLY) {
+      return;
+    }
+
     setStartingRun(true);
     try {
       const response = await fetch(`${API_BASE}/api/runs`, {
@@ -2706,6 +2842,56 @@ export default function App() {
       return;
     }
 
+    if (IS_PUBLIC_READONLY) {
+      setConnectionState("closed");
+      const runId = selectedRunId;
+      const controller = new AbortController();
+      let cancelled = false;
+      setLiveRunState(createInitialLiveRunState(runId));
+
+      async function loadStaticRunEvents(): Promise<void> {
+        try {
+          const response = await fetch(
+            buildPublicAssetUrl(`logs/run-events/${runId}.jsonl`),
+            {
+              signal: controller.signal,
+              cache: "no-store",
+            },
+          );
+          if (response.status === 404) {
+            if (!cancelled) {
+              setUiError(undefined);
+            }
+            return;
+          }
+          if (!response.ok) {
+            throw new Error(`Unable to load run events (HTTP ${response.status})`);
+          }
+          const content = await response.text();
+          const envelopes = parseRunEventEnvelopesFromJsonl(content);
+          const reduced = envelopes.reduce(
+            (state, envelope) => reduceEnvelope(state, envelope),
+            createInitialLiveRunState(runId),
+          );
+          if (!cancelled) {
+            setLiveRunState(reduced);
+            setUiError(undefined);
+          }
+        } catch (error) {
+          if (cancelled) {
+            return;
+          }
+          setUiError(error instanceof Error ? error.message : String(error));
+        }
+      }
+
+      void loadStaticRunEvents();
+      return () => {
+        cancelled = true;
+        controller.abort();
+      };
+    }
+
     setLiveRunState(createInitialLiveRunState(selectedRunId));
     setConnectionState("connecting");
 
@@ -2758,11 +2944,58 @@ export default function App() {
   }, [selectedRunId]);
 
   const selectedRunListItem = runs.find((run) => run.runId === selectedRunId);
+  const selectedReportPath =
+    liveRunState?.completion?.reportFilePath ??
+    selectedRunListItem?.reportFilePath;
+
+  useEffect(() => {
+    if (!IS_PUBLIC_READONLY) {
+      setReportMarkdownFromFile(undefined);
+      return;
+    }
+    if (!selectedReportPath) {
+      setReportMarkdownFromFile(undefined);
+      return;
+    }
+    const reportPath = normalizeReportPath(selectedReportPath);
+
+    const controller = new AbortController();
+    let cancelled = false;
+
+    async function loadReportMarkdown(): Promise<void> {
+      try {
+        const response = await fetch(buildPublicAssetUrl(reportPath), {
+          signal: controller.signal,
+          cache: "no-store",
+        });
+        if (!response.ok) {
+          throw new Error(`Unable to load report markdown (HTTP ${response.status})`);
+        }
+        const markdown = await response.text();
+        if (!cancelled) {
+          setReportMarkdownFromFile(markdown);
+          setUiError(undefined);
+        }
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+        setReportMarkdownFromFile(undefined);
+        setUiError(error instanceof Error ? error.message : String(error));
+      }
+    }
+
+    void loadReportMarkdown();
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [selectedReportPath]);
+
   const reportPayload = getReportPayload(liveRunState?.sections.report);
-  const reportMarkdown =
-    typeof reportPayload?.markdown === "string"
-      ? reportPayload.markdown
-      : undefined;
+  const reportMarkdownLive =
+    typeof reportPayload?.markdown === "string" ? reportPayload.markdown : undefined;
+  const reportMarkdown = reportMarkdownFromFile ?? reportMarkdownLive;
   const activeBlockingRunId = activeRunIds[0];
   const hasRunningRun =
     activeRunIds.length > 0 || liveRunState?.status === "running";
@@ -2802,9 +3035,6 @@ export default function App() {
   const runningReadinessLabel = readinessSequence.find(
     (item) => item.readiness === "running",
   )?.label;
-  const selectedReportPath =
-    liveRunState?.completion?.reportFilePath ??
-    selectedRunListItem?.reportFilePath;
   const launchDisabledReason = launchDisabled
     ? `A run is already in progress${activeBlockingRunId ? ` (${activeBlockingRunId})` : ""}. Concurrent launches are blocked to avoid data / UI conflicts.`
     : undefined;
@@ -2870,21 +3100,51 @@ export default function App() {
           </div>
         ) : null}
 
+        {IS_PUBLIC_READONLY ? (
+          <div className="rounded-xl border border-cyan-300/20 bg-cyan-400/10 px-4 py-3 text-sm text-cyan-100">
+            Public mode: history and reports are read-only from static artifacts.
+          </div>
+        ) : null}
+
         <div className="grid gap-4 lg:grid-cols-[minmax(0,340px)_minmax(0,1fr)]">
           <aside className="min-w-0 space-y-4">
-            <ControlsPanel
-              onStartRun={startRun}
-              starting={startingRun}
-              connectionState={connectionState}
-              launchDisabled={launchDisabled}
-              launchDisabledReason={launchDisabledReason}
-            />
-            <ActivityOverviewCard
-              state={liveRunState}
-              connectionState={connectionState}
-              compact={activityCompact}
-              onToggleCompact={() => setActivityCompact((current) => !current)}
-            />
+            {!IS_PUBLIC_READONLY ? (
+              <ControlsPanel
+                onStartRun={startRun}
+                starting={startingRun}
+                connectionState={connectionState}
+                launchDisabled={launchDisabled}
+                launchDisabledReason={launchDisabledReason}
+              />
+            ) : (
+              <Panel
+                title="Control Surface"
+                subtitle="Disabled in public mode"
+                actions={<ConnectionBadge status={connectionState} />}
+              >
+                <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-zinc-400">
+                  Run triggering is disabled on the public deployment.
+                </div>
+              </Panel>
+            )}
+            {!IS_PUBLIC_READONLY ? (
+              <ActivityOverviewCard
+                state={liveRunState}
+                connectionState={connectionState}
+                compact={activityCompact}
+                onToggleCompact={() => setActivityCompact((current) => !current)}
+              />
+            ) : (
+              <Panel
+                title="Live Activity"
+                subtitle="Disabled in public mode"
+                actions={<ConnectionBadge status={connectionState} />}
+              >
+                <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-zinc-400">
+                  Live stream monitoring is disabled on the public deployment.
+                </div>
+              </Panel>
+            )}
             <RunListPanel
               runs={runs}
               selectedRunId={selectedRunId}
@@ -2897,6 +3157,7 @@ export default function App() {
           </aside>
 
           <main className="min-w-0 space-y-4">
+
             <section className="panel">
               <div className="panel-body">
                 <div className="min-w-0 space-y-3">

@@ -71,10 +71,32 @@ export function ViewTabs({
   value: DashboardViewKey;
   onChange: (next: DashboardViewKey) => void;
 }) {
+  const activeView =
+    DASHBOARD_VIEWS.find((view) => view.key === value) ?? {
+      key: "overview",
+      label: "Overview",
+      hint: "Live essentials",
+    };
+
   return (
-    <div className="panel">
+    <div className="panel panel-strong">
       <div className="panel-body">
-        <div className="flex flex-wrap gap-2">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <div className="text-[11px] font-medium uppercase tracking-[0.24em] text-cyan-200/80">
+              Navigate
+            </div>
+          </div>
+          <div className="rounded-full border border-white/10 bg-black/25 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-zinc-300">
+            {activeView.label}
+          </div>
+        </div>
+
+        <div
+          role="tablist"
+          aria-label="Dashboard views"
+          className="flex flex-wrap gap-2"
+        >
           {DASHBOARD_VIEWS.map((view) => {
             const active = value === view.key;
             return (
@@ -82,17 +104,34 @@ export function ViewTabs({
                 key={view.key}
                 type="button"
                 onClick={() => onChange(view.key)}
+                role="tab"
+                aria-selected={active}
                 className={cx(
-                  "rounded-xl border px-3 py-2 text-left transition",
+                  "group relative min-w-[122px] flex-1 overflow-hidden rounded-xl border px-3 py-2 text-left transition duration-150 sm:min-w-[0] sm:flex-none",
                   active
-                    ? "border-cyan-300/25 bg-cyan-400/10 text-cyan-100 shadow-glow"
-                    : "border-white/10 bg-white/[0.02] text-zinc-300 hover:bg-white/[0.05]",
+                    ? "border-cyan-300/35 bg-cyan-400/[0.14] text-cyan-100 shadow-glow"
+                    : "border-white/10 bg-black/20 text-zinc-300 hover:border-white/15 hover:bg-white/[0.05]",
                 )}
               >
-                <div className="text-xs font-medium uppercase tracking-[0.16em]">
-                  {view.label}
+                <span
+                  className={cx(
+                    "pointer-events-none absolute inset-y-0 left-0 w-1 transition",
+                    active ? "bg-cyan-300" : "bg-transparent group-hover:bg-white/10",
+                  )}
+                />
+                <div className="min-w-0">
+                  <span className="block text-[11px] font-semibold uppercase tracking-[0.16em]">
+                    {view.label}
+                  </span>
+                  <span
+                    className={cx(
+                      "mt-0.5 block text-[10px]",
+                      active ? "text-cyan-100/75" : "text-zinc-400",
+                    )}
+                  >
+                    {view.hint}
+                  </span>
                 </div>
-                <div className="mt-1 text-[11px] text-zinc-400">{view.hint}</div>
               </button>
             );
           })}

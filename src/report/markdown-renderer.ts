@@ -1,4 +1,6 @@
 import type {
+  DefiDexVolumeSnapshot,
+  DefiTvlSnapshot,
   EtfFlowDataset,
   EtfFlowSnapshot,
   MacroSeriesObservation,
@@ -9,6 +11,7 @@ import type {
   PositionWordingBlock,
   RegimeAssessment,
   RiskInvalidationBlock,
+  StablecoinSupplySnapshot,
   SentimentAssessment,
   TriggerType,
 } from "../shared/types";
@@ -28,6 +31,9 @@ export interface RenderReportInput {
   outlook: OutlookDistribution;
   riskInvalidation: RiskInvalidationBlock;
   positionWording: PositionWordingBlock;
+  stablecoinSupply?: StablecoinSupplySnapshot;
+  defiTvl?: DefiTvlSnapshot;
+  dexVolume?: DefiDexVolumeSnapshot;
   etfFlows?: EtfFlowSnapshot;
   diagnostics?: string[];
 }
@@ -38,6 +44,31 @@ function formatPct(value: number): string {
 
 function formatUsdMillions(value: number): string {
   return `${value >= 0 ? "+" : "-"}$${Math.abs(value).toFixed(1)}m`;
+}
+
+function formatUsdCompact(value: number, options: { signed?: boolean } = {}): string {
+  const absolute = Math.abs(value);
+  const sign = options.signed ? (value >= 0 ? "+" : "-") : value < 0 ? "-" : "";
+
+  if (absolute >= 1_000_000_000_000) {
+    return `${sign}$${(absolute / 1_000_000_000_000).toFixed(2)}t`;
+  }
+  if (absolute >= 1_000_000_000) {
+    return `${sign}$${(absolute / 1_000_000_000).toFixed(2)}b`;
+  }
+  if (absolute >= 1_000_000) {
+    return `${sign}$${(absolute / 1_000_000).toFixed(2)}m`;
+  }
+
+  return `${sign}$${absolute.toFixed(2)}`;
+}
+
+function formatOptionalUsdChange(value: number | undefined): string {
+  return typeof value === "number" ? formatUsdCompact(value, { signed: true }) : "N/A";
+}
+
+function formatOptionalPctChange(value: number | undefined): string {
+  return typeof value === "number" ? formatPct(value) : "N/A";
 }
 
 const MACRO_COMMODITY_INSTRUMENT_IDS = new Set(["gold-usdc", "silver-usdc", "copper-usdc", "oil-usdc", "cl-usdc"]);
@@ -327,6 +358,24 @@ function renderExecutiveSummarySection(input: RenderReportInput): string[] {
   } else {
     lines.push("- Macro highlights: unavailable.");
   }
+  if (input.stablecoinSupply || input.defiTvl || input.dexVolume) {
+    const onchainHighlights = [
+      input.stablecoinSupply
+        ? `stablecoins ${formatUsdCompact(input.stablecoinSupply.currentSupplyUsd)} (${formatOptionalPctChange(input.stablecoinSupply.change7dPct)} 7d)`
+        : undefined,
+      input.defiTvl
+        ? `TVL ${formatUsdCompact(input.defiTvl.currentTvlUsd)} (${formatOptionalPctChange(input.defiTvl.change7dPct)} 7d)`
+        : undefined,
+      input.dexVolume
+        ? `DEX 24h ${formatUsdCompact(input.dexVolume.currentVolume24hUsd)} (${formatOptionalPctChange(input.dexVolume.change24hPct)} 24h)`
+        : undefined,
+    ]
+      .filter((value): value is string => typeof value === "string")
+      .join("; ");
+    lines.push(`- On-chain: ${onchainHighlights}.`);
+  } else {
+    lines.push("- On-chain: unavailable.");
+  }
   lines.push(`- ETF / flow monitor: ${flowHighlights}.`);
 
   return lines;
@@ -499,14 +548,91 @@ function renderMacroDashboardSection(input: RenderReportInput): string[] {
   return lines;
 }
 
-function renderCryptoDashboardSection(marketSnapshot: MarketSnapshotItem[]): string[] {
+function renderOnchainDashboardSection(input: Pick<RenderReportInput, "stablecoinSupply" | "defiTvl" | "dexVolume">): string[] {
   const lines: string[] = [];
-  const providerMatchedItems = marketSnapshot.filter((item) => {
+
+  if (!input.stablecoinSupply && !input.defiTvl && !input.dexVolume) {
+    lines.push("- No on-chain data available.");
+    return lines;
+  }
+
+  lines.push("### On-Chain Activity (DefiLlama)");
+  lines.push("");
+  lines.push(
+    buildMarkdownTableRow([
+      "Metric",
+      "Current",
+      "24h Change",
+      "24h %",
+      "7d Change",
+      "7d %",
+      "Captured At",
+      "Reference Window",
+    ]),
+  );
+  lines.push(buildMarkdownTableRow(["---", "---", "---", "---", "---", "---", "---", "---"]));
+
+  if (input.stablecoinSupply) {
+    lines.push(
+      buildMarkdownTableRow([
+        "Stablecoin Supply",
+        formatUsdCompact(input.stablecoinSupply.currentSupplyUsd),
+        formatOptionalUsdChange(input.stablecoinSupply.change24hUsd),
+        formatOptionalPctChange(input.stablecoinSupply.change24hPct),
+        formatOptionalUsdChange(input.stablecoinSupply.change7dUsd),
+        formatOptionalPctChange(input.stablecoinSupply.change7dPct),
+        input.stablecoinSupply.capturedAt,
+        [input.stablecoinSupply.reference24hAt, input.stablecoinSupply.reference7dAt]
+          .filter((value): value is string => typeof value === "string" && value.length > 0)
+          .join(" | ") || "N/A",
+      ]),
+    );
+  }
+
+  if (input.defiTvl) {
+    lines.push(
+      buildMarkdownTableRow([
+        "DeFi TVL",
+        formatUsdCompact(input.defiTvl.currentTvlUsd),
+        formatOptionalUsdChange(input.defiTvl.change24hUsd),
+        formatOptionalPctChange(input.defiTvl.change24hPct),
+        formatOptionalUsdChange(input.defiTvl.change7dUsd),
+        formatOptionalPctChange(input.defiTvl.change7dPct),
+        input.defiTvl.capturedAt,
+        [input.defiTvl.reference24hAt, input.defiTvl.reference7dAt]
+          .filter((value): value is string => typeof value === "string" && value.length > 0)
+          .join(" | ") || "N/A",
+      ]),
+    );
+  }
+
+  if (input.dexVolume) {
+    lines.push(
+      buildMarkdownTableRow([
+        "DEX Volume (24h)",
+        formatUsdCompact(input.dexVolume.currentVolume24hUsd),
+        formatOptionalUsdChange(input.dexVolume.change24hUsd),
+        formatOptionalPctChange(input.dexVolume.change24hPct),
+        formatOptionalUsdChange(input.dexVolume.change7dUsd),
+        formatOptionalPctChange(input.dexVolume.change7dPct),
+        input.dexVolume.capturedAt,
+        "24h / 7d delta",
+      ]),
+    );
+  }
+
+  return lines;
+}
+
+function renderCryptoDashboardSection(input: Pick<RenderReportInput, "marketSnapshot" | "stablecoinSupply" | "defiTvl" | "dexVolume">): string[] {
+  const lines: string[] = [];
+  const hasOnchainData = Boolean(input.stablecoinSupply || input.defiTvl || input.dexVolume);
+  const providerMatchedItems = input.marketSnapshot.filter((item) => {
     const provider = item.provider.toLowerCase();
     return provider.includes("coingecko") || provider.includes("hyperliquid");
   });
   const explicitCryptoItems = providerMatchedItems.filter((item) => !isMacroCommoditySnapshot(item));
-  const fallbackItems = marketSnapshot.filter((item) => !isMacroCommoditySnapshot(item));
+  const fallbackItems = input.marketSnapshot.filter((item) => !isMacroCommoditySnapshot(item));
   const itemsToRender =
     explicitCryptoItems.length > 0
       ? explicitCryptoItems
@@ -516,8 +642,15 @@ function renderCryptoDashboardSection(marketSnapshot: MarketSnapshotItem[]): str
 
   lines.push("## 6. Crypto Dashboard");
 
+  if (itemsToRender.length === 0 && !hasOnchainData) {
+    lines.push("- No crypto dashboard data available.");
+    return lines;
+  }
+
   if (itemsToRender.length === 0) {
     lines.push("- No crypto dashboard data available.");
+    lines.push("");
+    lines.push(...renderOnchainDashboardSection(input));
     return lines;
   }
 
@@ -525,35 +658,42 @@ function renderCryptoDashboardSection(marketSnapshot: MarketSnapshotItem[]): str
     lines.push("- No explicit crypto provider match found; rendering available market snapshot items.");
   }
 
-  lines.push(`- Instruments tracked: ${itemsToRender.length}`);
-  lines.push("");
-  lines.push(
-    buildMarkdownTableRow([
-      "Instrument",
-      "Price",
-      "Currency",
-      "24h",
-      "7d",
-      "Volume 24h",
-      "Provider",
-      "Captured At",
-    ]),
-  );
-  lines.push(buildMarkdownTableRow(["---", "---", "---", "---", "---", "---", "---", "---"]));
-
-  for (const item of itemsToRender) {
+  if (itemsToRender.length > 0) {
+    lines.push(`- Instruments tracked: ${itemsToRender.length}`);
+    lines.push("");
     lines.push(
       buildMarkdownTableRow([
-        item.instrumentId,
-        item.currentPrice.toFixed(2),
-        item.currency.toUpperCase(),
-        formatPct(item.return24hPct),
-        formatPct(item.return7dPct),
-        item.volume24h === undefined ? "N/A" : String(Math.round(item.volume24h)),
-        item.provider,
-        item.capturedAt,
+        "Instrument",
+        "Price",
+        "Currency",
+        "24h",
+        "7d",
+        "Volume 24h",
+        "Provider",
+        "Captured At",
       ]),
     );
+    lines.push(buildMarkdownTableRow(["---", "---", "---", "---", "---", "---", "---", "---"]));
+
+    for (const item of itemsToRender) {
+      lines.push(
+        buildMarkdownTableRow([
+          item.instrumentId,
+          item.currentPrice.toFixed(2),
+          item.currency.toUpperCase(),
+          formatPct(item.return24hPct),
+          formatPct(item.return7dPct),
+          item.volume24h === undefined ? "N/A" : String(Math.round(item.volume24h)),
+          item.provider,
+          item.capturedAt,
+        ]),
+      );
+    }
+  }
+
+  if (hasOnchainData) {
+    lines.push("");
+    lines.push(...renderOnchainDashboardSection(input));
   }
 
   return lines;
@@ -686,7 +826,7 @@ export function renderMarketReportMarkdown(input: RenderReportInput): string {
   lines.push(...renderMacroDashboardSection(input));
   lines.push("");
 
-  lines.push(...renderCryptoDashboardSection(input.marketSnapshot));
+  lines.push(...renderCryptoDashboardSection(input));
   lines.push("");
 
   lines.push(...renderEtfFlowsSection(input.etfFlows));

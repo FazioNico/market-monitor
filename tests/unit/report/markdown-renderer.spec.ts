@@ -224,6 +224,109 @@ describe("markdown renderer", () => {
     expect(markdown.trimEnd().endsWith("…")).toBe(false);
   });
 
+  it("renders DefiLlama on-chain snapshots inside the Crypto Dashboard", () => {
+    const markdown = renderMarketReportMarkdown({
+      generatedAt: "2026-02-25T10:00:00.000Z",
+      status: "complete",
+      triggerType: "manual",
+      dataSources: ["RSS", "CoinGecko", "DefiLlama", "FRED"],
+      newsItems: [],
+      marketSnapshot: [
+        {
+          instrumentId: "btc-usd",
+          capturedAt: "2026-02-25T10:00:00.000Z",
+          currentPrice: 100000,
+          return24hPct: 1.2,
+          return7dPct: 4.5,
+          volume24h: 123456789,
+          currency: "usd",
+          provider: "coingecko",
+        },
+      ],
+      macroContext: [],
+      regime: {
+        label: "transition",
+        dispersionSignal: "d",
+        correlationSignal: "c",
+        momentumSignal: "m",
+        macroSignal: "macro",
+        macroContext: [],
+        rationale: "r",
+      },
+      sentiment: {
+        score: 0,
+        method: "deterministic",
+        narrativeSummary: "n",
+        priceActionCoherence: "p",
+        status: "complete",
+      },
+      outlook: {
+        bullPct: 30,
+        basePct: 40,
+        bearPct: 30,
+        primaryScenario: "base",
+        justification: "j",
+        constraintValidated: true,
+      },
+      riskInvalidation: {
+        invalidationConditions: ["a"],
+        keyPriceThresholds: ["b"],
+        criticalMacroEvents: ["c"],
+      },
+      positionWording: {
+        currentBias: "Measured risk-on bias",
+        addExposureConditions: ["x"],
+        reduceExposureConditions: ["y"],
+        noTradeZones: ["z"],
+        timeHorizon: "1-3 days",
+        status: "complete",
+      },
+      stablecoinSupply: {
+        source: "defillama",
+        capturedAt: "2026-02-25T10:00:00.000Z",
+        currentSupplyUsd: 225_000_000_000,
+        change24hUsd: 1_500_000_000,
+        change24hPct: 0.67,
+        change7dUsd: 4_000_000_000,
+        change7dPct: 1.81,
+        reference24hAt: "2026-02-24T10:00:00.000Z",
+        reference7dAt: "2026-02-18T10:00:00.000Z",
+      },
+      defiTvl: {
+        source: "defillama",
+        capturedAt: "2026-02-25T10:00:00.000Z",
+        currentTvlUsd: 110_000_000_000,
+        change24hUsd: 900_000_000,
+        change24hPct: 0.82,
+        change7dUsd: 3_500_000_000,
+        change7dPct: 3.29,
+        reference24hAt: "2026-02-24T10:00:00.000Z",
+        reference7dAt: "2026-02-18T10:00:00.000Z",
+      },
+      dexVolume: {
+        source: "defillama",
+        capturedAt: "2026-02-25T10:00:00.000Z",
+        currentVolume24hUsd: 12_500_000_000,
+        change24hUsd: 1_100_000_000,
+        change24hPct: 9.65,
+        change7dUsd: 2_300_000_000,
+        change7dPct: 22.54,
+      },
+    });
+
+    const cryptoStart = markdown.indexOf("## 6. Crypto Dashboard");
+    const flowStart = markdown.indexOf("## 7. Flow & ETF Data");
+    const cryptoSection = markdown.slice(cryptoStart, flowStart);
+
+    expect(markdown).toContain("- On-chain: stablecoins $225.00b (+1.81% 7d); TVL $110.00b (+3.29% 7d); DEX 24h $12.50b (+9.65% 24h).");
+    expect(cryptoSection).toContain("### On-Chain Activity (DefiLlama)");
+    expect(cryptoSection).toContain("Stablecoin Supply");
+    expect(cryptoSection).toContain("DeFi TVL");
+    expect(cryptoSection).toContain("DEX Volume (24h)");
+    expect(cryptoSection).toContain("$225.00b");
+    expect(cryptoSection).toContain("$12.50b");
+  });
+
   it("renders Alpha Vantage indices and Hyperliquid macro commodities under Macro Dashboard and excludes commodities from Crypto Dashboard", () => {
     const markdown = renderMarketReportMarkdown({
       generatedAt: "2026-02-25T10:00:00.000Z",

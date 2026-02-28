@@ -799,6 +799,9 @@ export async function runReviewService(
       outlook,
       riskInvalidation,
       positionWording,
+      stablecoinSupply,
+      defiTvl,
+      dexVolume,
       etfFlows,
       diagnostics,
     });

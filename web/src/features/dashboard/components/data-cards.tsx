@@ -74,10 +74,20 @@ export function TopArticlesCard({ state }: { state?: LiveRunState }) {
             {payload.method ? (
               <span className="data-pill">method: {payload.method}</span>
             ) : null}
-            <span className="data-pill">items: {items.length}</span>
+            <span className="data-pill">selected: {items.length}</span>
+            {typeof payload.candidateNewsEvaluated === "number" ? (
+              <span className="data-pill">
+                screened: {payload.candidateNewsEvaluated}
+              </span>
+            ) : null}
+            {typeof payload.totalNewsEvaluated === "number" ? (
+              <span className="data-pill">
+                total: {payload.totalNewsEvaluated}
+              </span>
+            ) : null}
           </div>
           <div className="space-y-3">
-            {items.slice(0, 12).map((item, index) => {
+            {items.map((item, index) => {
               const rank =
                 typeof item.rank === "number" ? item.rank : index + 1;
               const title =

@@ -98,7 +98,12 @@ export function getEtfFlowsPayload(
 
 export function getTopArticlesPayload(
   value: unknown,
-): { items: Array<Record<string, unknown>>; method?: string } | undefined {
+): {
+  items: Array<Record<string, unknown>>;
+  method?: string;
+  candidateNewsEvaluated?: number;
+  totalNewsEvaluated?: number;
+} | undefined {
   if (!isRecord(value)) return undefined;
   const items = asArray(value.items).filter(
     (item): item is Record<string, unknown> => isRecord(item),
@@ -106,6 +111,8 @@ export function getTopArticlesPayload(
   return {
     items,
     method: typeof value.method === "string" ? value.method : undefined,
+    candidateNewsEvaluated: asNumber(value.candidateNewsEvaluated),
+    totalNewsEvaluated: asNumber(value.totalNewsEvaluated),
   };
 }
 

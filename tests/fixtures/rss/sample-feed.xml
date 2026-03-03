@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Sample Market Feed</title>
+    <link>https://example.com/</link>
+    <description>Sample RSS fixture for tests</description>
+    <item>
+      <title>Bitcoin rebounds after overnight selloff</title>
+      <link>https://example.com/articles/bitcoin-rebounds</link>
+      <pubDate>Mon, 23 Feb 2026 08:15:00 GMT</pubDate>
+      <description>Risk assets stabilized in European trading.</description>
+    </item>
+  </channel>
+</rss>

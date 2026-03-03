@@ -1,0 +1,66 @@
+name: Deploy Front to GitHub Pages
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "web/**"
+      - ".github/workflows/deploy-front-pages.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: deploy-front-pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install front dependencies
+        working-directory: web
+        run: bun install --frozen-lockfile
+
+      - name: Create front environment file
+        working-directory: web
+        env:
+          VITE_APP_MODE: ${{ vars.VITE_APP_MODE }}
+          VITE_PUBLIC_DATA_BASE_URL: ${{ vars.VITE_PUBLIC_DATA_BASE_URL }}
+        run: |
+          if [ -z "$VITE_APP_MODE" ]; then
+            echo "Missing required GitHub variable: VITE_APP_MODE"
+            exit 1
+          fi
+
+          if [ -z "$VITE_PUBLIC_DATA_BASE_URL" ]; then
+            echo "Missing required GitHub variable: VITE_PUBLIC_DATA_BASE_URL"
+            exit 1
+          fi
+
+          printf 'VITE_APP_MODE=%s\nVITE_PUBLIC_DATA_BASE_URL=%s\n' \
+            "$VITE_APP_MODE" \
+            "$VITE_PUBLIC_DATA_BASE_URL" > .env
+
+      - name: Build front
+        working-directory: web
+        run: bun run build
+
+      - name: Publish build to front branch
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: front
+          publish_dir: web/dist
+          force_orphan: true

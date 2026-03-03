@@ -1,0 +1,17 @@
+{
+  "realtime_start": "2026-02-23",
+  "realtime_end": "2026-02-23",
+  "observation_start": "2025-01-01",
+  "observation_end": "2026-02-23",
+  "units": "lin",
+  "file_type": "json",
+  "order_by": "observation_date",
+  "sort_order": "desc",
+  "count": 2,
+  "offset": 0,
+  "limit": 100000,
+  "observations": [
+    { "date": "2026-01-01", "value": "317.200" },
+    { "date": "2025-12-01", "value": "316.450" }
+  ]
+}

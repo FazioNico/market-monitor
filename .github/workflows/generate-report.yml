@@ -1,0 +1,137 @@
+name: Generate Market Report
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Daily at 06:55 UTC
+    - cron: "55 6 * * *"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: generate-market-report
+  cancel-in-progress: false
+
+jobs:
+  generate-report:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Create runtime config from secrets
+        env:
+          WATCHLIST_JSON: ${{ secrets.WATCHLIST_JSON }}
+          RSS_FEEDS_MD: ${{ secrets.RSS_FEEDS_MD }}
+        run: |
+          mkdir -p config
+
+          if [ -z "$WATCHLIST_JSON" ]; then
+            echo "Missing required secret: WATCHLIST_JSON"
+            exit 1
+          fi
+
+          if [ -z "$RSS_FEEDS_MD" ]; then
+            echo "Missing required secret: RSS_FEEDS_MD"
+            exit 1
+          fi
+
+          printf '%s\n' "$WATCHLIST_JSON" > config/watchlist.json
+          printf '%s\n' "$RSS_FEEDS_MD" > config/rss-feeds.md
+
+          jq empty config/watchlist.json
+          [ -s config/rss-feeds.md ]
+
+      - name: Validate generated config
+        run: bun run dev -- config validate
+
+      - name: Generate report
+        env:
+          REPORTS_DIR: reports
+          RUN_LOG_PATH: logs/runs.jsonl
+          FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+          ALPHA_VANTAGE_API_KEY: ${{ secrets.ALPHA_VANTAGE_API_KEY }}
+          LLM_PROVIDER: ${{ vars.LLM_PROVIDER }}
+          LLM_MODEL: ${{ secrets.LLM_MODEL }}
+          LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+        run: bun run dev -- review run
+
+      - name: Publish artifacts to prod branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          ARTIFACT_BRANCH="prod"
+          SOURCE_REPORTS="reports"
+          SOURCE_LOGS="logs"
+          TARGET_DIR=".artifact-branch"
+
+          mkdir -p "$SOURCE_REPORTS" "$SOURCE_LOGS"
+
+          git fetch origin "$ARTIFACT_BRANCH" || true
+
+          if git ls-remote --exit-code --heads origin "$ARTIFACT_BRANCH" >/dev/null 2>&1; then
+            git worktree add "$TARGET_DIR" "origin/$ARTIFACT_BRANCH"
+          else
+            git worktree add --detach "$TARGET_DIR"
+            (
+              cd "$TARGET_DIR"
+              git checkout --orphan "$ARTIFACT_BRANCH"
+              git rm -rf . >/dev/null 2>&1 || true
+              mkdir -p reports logs
+              printf '%s\n' \
+                '*' \
+                '!.gitignore' \
+                '!reports/' \
+                '!reports/**' \
+                '!logs/' \
+                '!logs/**' > .gitignore
+              git add .gitignore reports logs
+              git commit -m "chore(artifacts): initialize prod branch"
+              git push origin "$ARTIFACT_BRANCH"
+            )
+            git worktree remove "$TARGET_DIR"
+            git worktree add "$TARGET_DIR" "$ARTIFACT_BRANCH"
+          fi
+
+          # Keep full history on artifact branch: copy new/updated files only.
+          rsync -a "$SOURCE_REPORTS"/ "$TARGET_DIR/reports/"
+
+          # Preserve cumulative runs history instead of overwriting with the current run file.
+          if [ -f "$SOURCE_LOGS/runs.jsonl" ]; then
+            mkdir -p "$TARGET_DIR/logs"
+            touch "$TARGET_DIR/logs/runs.jsonl"
+            cat "$SOURCE_LOGS/runs.jsonl" >> "$TARGET_DIR/logs/runs.jsonl"
+          fi
+
+          # Publish per-run event streams for static dashboard replay.
+          if [ -d "$SOURCE_LOGS/run-events" ]; then
+            mkdir -p "$TARGET_DIR/logs/run-events"
+            rsync -a "$SOURCE_LOGS/run-events"/ "$TARGET_DIR/logs/run-events/"
+          fi
+
+          (
+            cd "$TARGET_DIR"
+            git add -A
+            if git diff --cached --quiet; then
+              echo "No artifact changes to commit on $ARTIFACT_BRANCH"
+              exit 0
+            fi
+            git commit -m "chore(artifacts): update market report ($(date -u +%F))"
+            git push origin HEAD:"$ARTIFACT_BRANCH"
+          )
+
+          git worktree remove "$TARGET_DIR"

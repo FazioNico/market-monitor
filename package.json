@@ -5,19 +5,30 @@
   "private": true,
   "scripts": {
     "dev": "bun src/index.ts",
-    "build": "tsc",
-    "start": "node dist/index.js"
+    "dev:server": "bun server/src/index.ts",
+    "dev:web": "bun --cwd web run dev",
+    "build:web": "bun --cwd web run build",
+    "build": "bunx tsc --noEmit",
+    "start": "bun src/index.ts",
+    "start:report": "bun run dev -- review run",
+    "test": "bunx vitest run",
+    "test:unit": "bunx vitest run tests/unit",
+    "test:functional": "bunx vitest run tests/functional",
+    "test:coverage": "bunx vitest run --coverage --reporter=default"
   },
   "devDependencies": {
     "@types/bun": "latest",
-    "@types/node": "^25.3.0"
-  },
-  "peerDependencies": {
-    "typescript": "^5"
+    "@types/node": "^25.3.0",
+    "@vitest/coverage-v8": "latest",
+    "typescript": "^5",
+    "vitest": "latest"
   },
   "dependencies": {
+    "@nktkas/hyperliquid": "^0.31.0",
     "better-sqlite3": "^12.6.2",
     "dotenv": "^17.3.1",
+    "fast-xml-parser": "latest",
+    "gray-matter": "latest",
     "node-cron": "^4.2.1",
     "tsx": "^4.21.0",
     "zod": "^4.3.6"
